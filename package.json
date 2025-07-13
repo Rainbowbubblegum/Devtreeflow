@@ -1,0 +1,320 @@
+{
+  "name": "devtreeflow",
+  "displayName": "DevTreeFlow",
+  "description": "AI context management system for structured development workflows",
+  "version": "0.3.2",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "devTreeFlowExplorer",
+          "name": "DevTreeFlow",
+          "when": "resourceExtname"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "devtreeflow.refreshTree",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "devtreeflow.newTaskTree",
+        "title": "New Task Tree",
+        "icon": "$(add)"
+      },
+      {
+        "command": "devtreeflow.switchToNode",
+        "title": "Switch to Me"
+      },
+      {
+        "command": "devtreeflow.switchAndFollowParent",
+        "title": "Switch and Follow Parent Instructions"
+      },
+      {
+        "command": "devtreeflow.assessChildren",
+        "title": "Assess Children"
+      },
+      {
+        "command": "devtreeflow.summarizeStatus",
+        "title": "Summarize Task Status"
+      },
+      {
+        "command": "devtreeflow.createDevTreeFlow",
+        "title": "Initialize DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.showDashboard",
+        "title": "DevTreeFlow: Show Dashboard",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "devtreeflow.autoPromptCurrentLeaf",
+        "title": "DevTreeFlow: Auto-Prompt Current Leaf",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.autoPromptWithContext",
+        "title": "DevTreeFlow: Auto-Prompt with Selected Code",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.autoPromptAssessment",
+        "title": "DevTreeFlow: Auto-Prompt Assessment",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.autoPromptCorrection",
+        "title": "DevTreeFlow: Auto-Prompt Correction",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.autoPromptRecovery",
+        "title": "DevTreeFlow: Auto-Prompt Recovery",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.quickSwitchToLeaf",
+        "title": "DevTreeFlow: Quick Switch to Leaf",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.toggleAutoPromptingMode",
+        "title": "DevTreeFlow: Toggle Auto-Prompting Mode",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.openNewCursorChat",
+        "title": "DevTreeFlow: Open New Cursor Chat",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.focusCursorChat",
+        "title": "DevTreeFlow: Focus Cursor Chat",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.testCursorCommands",
+        "title": "DevTreeFlow: Test Cursor Commands (Debug)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.testAutomationFlow",
+        "title": "DevTreeFlow: Test Automation Flow (Debug)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.listAvailableCommands",
+        "title": "DevTreeFlow: List Available Commands (Debug)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.testKeyboardSimulation",
+        "title": "DevTreeFlow: Test Keyboard Simulation (Debug)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.openExtensionsPanel",
+        "title": "DevTreeFlow: Open Extensions Panel (Simulate Ctrl+Shift+X)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.clearCurrentChat",
+        "title": "DevTreeFlow: Clear Current Chat (Focus, Select All, Backspace)",
+        "category": "DevTreeFlow"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "devtreeflow.autoPromptCurrentLeaf",
+        "key": "alt+shift+d",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.autoPromptWithContext",
+        "key": "alt+shift+c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.autoPromptAssessment",
+        "key": "alt+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.autoPromptCorrection",
+        "key": "alt+shift+x",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.autoPromptRecovery",
+        "key": "alt+shift+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.quickSwitchToLeaf",
+        "key": "alt+shift+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.showDashboard",
+        "key": "alt+shift+o",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.toggleAutoPromptingMode",
+        "key": "alt+shift+m",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.openNewCursorChat",
+        "key": "alt+shift+n",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devtreeflow.focusCursorChat",
+        "key": "alt+shift+f",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "devtreeflow.refreshTree",
+          "when": "view == devTreeFlowExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "devtreeflow.newTaskTree",
+          "when": "view == devTreeFlowExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "devtreeflow.showDashboard",
+          "when": "view == devTreeFlowExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "devtreeflow.switchToNode",
+          "when": "view == devTreeFlowExplorer && viewItem == treeNode",
+          "group": "inline"
+        },
+        {
+          "command": "devtreeflow.switchAndFollowParent",
+          "when": "view == devTreeFlowExplorer && viewItem == treeNode",
+          "group": "context"
+        },
+        {
+          "command": "devtreeflow.assessChildren",
+          "when": "view == devTreeFlowExplorer && viewItem == treeNode",
+          "group": "context"
+        },
+        {
+          "command": "devtreeflow.summarizeStatus",
+          "when": "view == devTreeFlowExplorer && viewItem == treeNode",
+          "group": "context"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "devtreeflow.autoPromptCurrentLeaf",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.autoPromptWithContext",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.autoPromptAssessment",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.autoPromptCorrection",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.autoPromptRecovery",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.toggleAutoPromptingMode",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.openNewCursorChat",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        },
+        {
+          "command": "devtreeflow.focusCursorChat",
+          "when": "editorTextFocus",
+          "group": "DevTreeFlow"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "devtreeflow.autoPromptCurrentLeaf",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devtreeflow.autoPromptWithContext",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devtreeflow.autoPromptAssessment",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devtreeflow.autoPromptCorrection",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devtreeflow.autoPromptRecovery",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "devtreeflow.quickSwitchToLeaf",
+          "when": "editorTextFocus"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^4.9.4"
+  },
+  "keywords": [],
+  "author": "DevTreeFlow Team",
+  "license": "MIT",
+  "publisher": "devtreeflow",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devtreeflow/extension"
+  }
+}
