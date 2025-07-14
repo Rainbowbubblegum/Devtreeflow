@@ -292,17 +292,17 @@ Please consider this code in your response and provide guidance or implementatio
             console.log('DevTreeFlow: Opening new Cursor chat using combo (focus, then Ctrl+N)...');
             const isAvailable = await KeyboardSimulator.isKeyboardSimulationAvailable();
             if (!isAvailable) {
-                vscode.window.showWarningMessage('⚠️ Keyboard simulation not available. Please open Cursor chat manually with Ctrl+Shift+7, then Ctrl+N.');
+                vscode.window.showWarningMessage('⚠️ Keyboard simulation not available. Please open Cursor chat manually with Ctrl+L (or Ctrl+Shift+L), then Ctrl+N.');
                 return;
             }
             const success = await KeyboardSimulator.simulateFocusThenNewChat();
             if (success) {
                 vscode.window.showInformationMessage('✅ New Cursor chat opened (focus, then Ctrl+N)!');
             } else {
-                vscode.window.showWarningMessage('⚠️ Failed to open new chat automatically. Please use Ctrl+Shift+7, then Ctrl+N manually.');
+                vscode.window.showWarningMessage('⚠️ Failed to open new chat automatically. Please use Ctrl+L (or Ctrl+Shift+L), then Ctrl+N manually.');
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open new Cursor chat: ${error}. Please use Ctrl+Shift+7, then Ctrl+N manually.`);
+            vscode.window.showErrorMessage(`Failed to open new Cursor chat: ${error}. Please use Ctrl+L (or Ctrl+Shift+L), then Ctrl+N manually.`);
         }
     }
 
@@ -314,22 +314,22 @@ Please consider this code in your response and provide guidance or implementatio
             console.log('DevTreeFlow: Opening new Cursor chat tab using combo (focus, then Ctrl+T)...');
             const isAvailable = await KeyboardSimulator.isKeyboardSimulationAvailable();
             if (!isAvailable) {
-                vscode.window.showWarningMessage('⚠️ Keyboard simulation not available. Please open new chat tab manually with Ctrl+Shift+7, then Ctrl+T.');
+                vscode.window.showWarningMessage('⚠️ Keyboard simulation not available. Please open new chat tab manually with Ctrl+L (or Ctrl+Shift+L), then Ctrl+T.');
                 return;
             }
             const success = await KeyboardSimulator.simulateFocusThenNewChatTab();
             if (success) {
                 vscode.window.showInformationMessage('✅ New Cursor chat tab opened (focus, then Ctrl+T)!');
             } else {
-                vscode.window.showWarningMessage('⚠️ Failed to open new chat tab automatically. Please use Ctrl+Shift+7, then Ctrl+T manually.');
+                vscode.window.showWarningMessage('⚠️ Failed to open new chat tab automatically. Please use Ctrl+L (or Ctrl+Shift+L), then Ctrl+T manually.');
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open new Cursor chat tab: ${error}. Please use Ctrl+Shift+7, then Ctrl+T manually.`);
+            vscode.window.showErrorMessage(`Failed to open new Cursor chat tab: ${error}. Please use Ctrl+L (or Ctrl+Shift+L), then Ctrl+T manually.`);
         }
     }
 
     /**
-     * Focus Cursor chat input using keyboard simulation (Ctrl+Shift+7)
+     * Focus Cursor chat input using keyboard simulation (Try multiple shortcuts)
      */
     public static async focusChatInput(): Promise<void> {
         try {
@@ -341,14 +341,32 @@ Please consider this code in your response and provide guidance or implementatio
                 vscode.window.showWarningMessage('⚠️ Keyboard simulation not available. Please click in chat input manually.');
                 return;
             }
-            // Simulate Ctrl+Shift+7 to focus chat
-            const success = await KeyboardSimulator.simulateKeyboardShortcut('ctrl+shift+7');
+            
+            // Try multiple shortcuts to focus chat
+            let success = false;
+            
+            // Try Ctrl+L first (most common Cursor chat shortcut)
+            console.log('Trying Ctrl+L to focus chat...');
+            success = await KeyboardSimulator.simulateKeyboardShortcut('ctrl+l');
+            
+            if (!success) {
+                // Try Ctrl+Shift+L as fallback
+                console.log('Ctrl+L failed, trying Ctrl+Shift+L...');
+                success = await KeyboardSimulator.simulateKeyboardShortcut('ctrl+shift+l');
+            }
+            
+            if (!success) {
+                // Try Ctrl+Shift+7 as last resort (legacy)
+                console.log('Ctrl+Shift+L failed, trying Ctrl+Shift+7...');
+                success = await KeyboardSimulator.simulateKeyboardShortcut('ctrl+shift+7');
+            }
+            
             if (success) {
                 console.log('✅ Successfully focused Cursor chat input via keyboard simulation');
                 vscode.window.showInformationMessage('✅ Cursor chat focused via keyboard simulation!');
             } else {
                 console.log('❌ Failed to focus chat input via keyboard simulation');
-                vscode.window.showWarningMessage('⚠️ Failed to focus chat automatically. Please click in chat input manually.');
+                vscode.window.showWarningMessage('⚠️ Failed to focus chat automatically. Try: Ctrl+L, Ctrl+Shift+L, or check your Cursor keybindings.');
             }
         } catch (error) {
             console.error('DevTreeFlow: Error focusing chat input:', error);
@@ -418,7 +436,7 @@ Please consider this code in your response and provide guidance or implementatio
                 `📋 Prompt copied to clipboard!\n\n` +
                 `📝 Preview: "${promptPreview}"\n\n` +
                 `💡 Next steps:\n` +
-                `   1. Open Cursor chat (Ctrl+Shift+L)\n` +
+                `   1. Open Cursor chat (Ctrl+L or Ctrl+Shift+L)\n` +
                 `   2. Paste with Ctrl+Shift+V\n` +
                 `   3. Press Enter to send`,
                 '📋 Copy Again',

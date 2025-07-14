@@ -162,7 +162,7 @@ export class KeyboardSimulator {
     
     /**
      * Simulate the full Cursor chat automation sequence
-     * New flow: Focus AI chat (Ctrl+Shift+7), wait, paste (Ctrl+V), do NOT send Enter
+     * New flow: Focus AI chat (Ctrl+L or configurable), wait, paste (Ctrl+V), do NOT send Enter
      */
     public static async simulateCursorChatSequence(prompt: string): Promise<boolean> {
         try {
@@ -171,22 +171,48 @@ export class KeyboardSimulator {
             // Step 1: Copy prompt to clipboard
             await vscode.env.clipboard.writeText(prompt);
             console.log('✅ Step 1: Copied prompt to clipboard');
-            // Step 2: Focus AI chat (Ctrl+Shift+7)
-            console.log('🔄 Step 2: Focusing AI chat (Ctrl+Shift+7)...');
-            const focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+7');
+            
+            // Step 2: Focus AI chat - Try multiple shortcuts
+            console.log('🔄 Step 2: Focusing AI chat...');
+            let focusSuccess = false;
+            
+            // Try Ctrl+L first (most common Cursor chat shortcut)
+            console.log('Trying Ctrl+L...');
+            focusSuccess = await this.simulateKeyboardShortcut('ctrl+l');
+            
+            if (!focusSuccess) {
+                // Try Ctrl+Shift+L as fallback
+                console.log('Ctrl+L failed, trying Ctrl+Shift+L...');
+                focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+l');
+            }
+            
+            if (!focusSuccess) {
+                // Try Ctrl+Shift+7 as last resort (legacy)
+                console.log('Ctrl+Shift+L failed, trying Ctrl+Shift+7...');
+                focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+7');
+            }
+            
             console.log(focusSuccess ? '✅ Step 2: Focused AI chat' : '❌ Step 2: Failed to focus AI chat');
+            
             // Step 3: Wait for chat to focus
             console.log('⏳ Step 3: Waiting for chat to focus (500ms)...');
             await new Promise(resolve => setTimeout(resolve, 500));
             console.log('✅ Step 3: Wait completed');
+            
             // Step 4: Paste (Ctrl+V)
             console.log('🔄 Step 4: Attempting to paste content (Ctrl+V)...');
             const pasteSuccess = await this.simulateKeyboardShortcut('ctrl+v');
             console.log(pasteSuccess ? '✅ Step 4: Pasted content' : '❌ Step 4: Failed to paste');
+            
             // Do NOT send Enter
             // Summary
             const successfulSteps = [focusSuccess, pasteSuccess].filter(Boolean).length;
             console.log(`📊 Automation Summary: ${successfulSteps}/2 key steps successful (no auto-send)`);
+            
+            if (!focusSuccess) {
+                vscode.window.showWarningMessage('⚠️ Could not focus AI chat. Try: Ctrl+L, Ctrl+Shift+L, or check your Cursor keybindings.');
+            }
+            
             return focusSuccess && pasteSuccess;
         } catch (error) {
             console.error('💥 DevTreeFlow: Keyboard simulation sequence failed:', error);
@@ -258,33 +284,71 @@ export class KeyboardSimulator {
     }
 
     /**
-     * Simulate: Focus chat (Ctrl+Shift+7), then open new chat tab (Ctrl+T)
+     * Simulate focusing Cursor chat then opening new chat (Ctrl+L then Ctrl+N)
      */
-    public static async simulateFocusThenNewChatTab(): Promise<boolean> {
+    public static async simulateFocusThenNewChat(): Promise<boolean> {
         try {
-            const focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+7');
-            if (!focusSuccess) return false;
+            console.log('🎯 DevTreeFlow: Starting focus then new chat sequence...');
+            
+            // Step 1: Focus AI chat
+            console.log('🔄 Step 1: Focusing AI chat...');
+            let focusSuccess = await this.simulateKeyboardShortcut('ctrl+l') || 
+                               await this.simulateKeyboardShortcut('ctrl+shift+l') ||
+                               await this.simulateKeyboardShortcut('ctrl+shift+7');
+            
+            if (!focusSuccess) {
+                console.log('❌ Failed to focus AI chat');
+                return false;
+            }
+            console.log('✅ Step 1: Focused AI chat');
+            
+            // Step 2: Wait a bit
+            console.log('⏳ Step 2: Waiting 300ms...');
             await new Promise(resolve => setTimeout(resolve, 300));
-            const tabSuccess = await this.simulateKeyboardShortcut('ctrl+t');
-            return tabSuccess;
+            
+            // Step 3: New chat (Ctrl+N)
+            console.log('🔄 Step 3: Creating new chat (Ctrl+N)...');
+            const newChatSuccess = await this.simulateKeyboardShortcut('ctrl+n');
+            console.log(newChatSuccess ? '✅ Step 3: Created new chat' : '❌ Step 3: Failed to create new chat');
+            
+            return focusSuccess && newChatSuccess;
         } catch (error) {
-            console.error('DevTreeFlow: simulateFocusThenNewChatTab failed:', error);
+            console.error('💥 DevTreeFlow: Focus then new chat sequence failed:', error);
             return false;
         }
     }
 
     /**
-     * Simulate: Focus chat (Ctrl+Shift+7), then open new chat (Ctrl+N)
+     * Simulate focusing Cursor chat then opening new chat tab (Ctrl+L then Ctrl+T)
      */
-    public static async simulateFocusThenNewChat(): Promise<boolean> {
+    public static async simulateFocusThenNewChatTab(): Promise<boolean> {
         try {
-            const focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+7');
-            if (!focusSuccess) return false;
+            console.log('🎯 DevTreeFlow: Starting focus then new chat tab sequence...');
+            
+            // Step 1: Focus AI chat
+            console.log('🔄 Step 1: Focusing AI chat...');
+            let focusSuccess = await this.simulateKeyboardShortcut('ctrl+l') || 
+                               await this.simulateKeyboardShortcut('ctrl+shift+l') ||
+                               await this.simulateKeyboardShortcut('ctrl+shift+7');
+            
+            if (!focusSuccess) {
+                console.log('❌ Failed to focus AI chat');
+                return false;
+            }
+            console.log('✅ Step 1: Focused AI chat');
+            
+            // Step 2: Wait a bit
+            console.log('⏳ Step 2: Waiting 300ms...');
             await new Promise(resolve => setTimeout(resolve, 300));
-            const newSuccess = await this.simulateKeyboardShortcut('ctrl+n');
-            return newSuccess;
+            
+            // Step 3: New chat tab (Ctrl+T)
+            console.log('🔄 Step 3: Creating new chat tab (Ctrl+T)...');
+            const newTabSuccess = await this.simulateKeyboardShortcut('ctrl+t');
+            console.log(newTabSuccess ? '✅ Step 3: Created new chat tab' : '❌ Step 3: Failed to create new chat tab');
+            
+            return focusSuccess && newTabSuccess;
         } catch (error) {
-            console.error('DevTreeFlow: simulateFocusThenNewChat failed:', error);
+            console.error('💥 DevTreeFlow: Focus then new chat tab sequence failed:', error);
             return false;
         }
     }
