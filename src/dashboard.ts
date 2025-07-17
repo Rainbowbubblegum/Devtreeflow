@@ -46,10 +46,13 @@ export class DevTreeFlowDashboard {
                 }
             );
 
+            // Get logo URI for webview
+            const logoUri = this.panel.webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'Devtreeflow.PNG')));
+
             console.log('DevTreeFlow: Setting WebView content...');
             // Load context folder structure
             this.loadContextFolderStructure();
-            this.panel.webview.html = this.getWebviewContent();
+            this.panel.webview.html = this.getWebviewContent(logoUri);
 
             this.panel.webview.onDidReceiveMessage(
                 async (message) => {
@@ -429,7 +432,8 @@ Copy this prompt to your clipboard and begin breaking down your task:
     }
 
     // [6] Update getWebviewContent to add new UI sections and JS wiring
-    private getWebviewContent(): string {
+    private getWebviewContent(logoUri?: vscode.Uri): string {
+        const logoImg = logoUri ? `<img src="${logoUri}" alt="DevTreeFlow Logo" style="height:32px;width:32px;vertical-align:middle;margin-right:10px;" />` : '🌳';
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -580,6 +584,35 @@ Copy this prompt to your clipboard and begin breaking down your task:
         .context-folder-children {
             margin-left: 20px;
         }
+        .context-folder-children.collapsed {
+            display: none;
+        }
+        .context-folder-toggle {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            padding: 2px 4px;
+            font-size: 12px;
+            opacity: 0.7;
+            margin-right: 4px;
+            transition: transform 0.2s ease;
+        }
+        .context-folder-toggle:hover {
+            opacity: 1;
+        }
+        .context-folder-toggle.expanded {
+            transform: rotate(90deg);
+        }
+        .context-folder-header {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .context-folder-header:hover {
+            background-color: var(--vscode-list-hoverBackground);
+        }
         .context-add-btn {
             background: none;
             border: none;
@@ -718,13 +751,19 @@ Copy this prompt to your clipboard and begin breaking down your task:
                 width: 100%;
             }
         }
+        .devtreeflow-logo {
+            height: 18px;
+            width: 18px;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
     </style>
 </head>
 <body>
     <div class="dashboard-header">
-        <h1>🌳 DevTreeFlow Dashboard</h1>
+        <h1>${logoImg} DevTreeFlow Dashboard</h1>
         <button class="refresh-btn-top" onclick="refreshTree()">
-            <span class="icon">🔄</span>Refresh
+            <img src="${logoUri}" class="devtreeflow-logo" alt="logo" />Refresh
         </button>
     </div>
     <div class="section">
@@ -770,7 +809,7 @@ Copy this prompt to your clipboard and begin breaking down your task:
                 </div>
             </div>
             <div id="contextFilesContainer">
-                <h3>📄 Project Specific Context Files</h3>
+                <h3><img src="${logoUri}" class="devtreeflow-logo" alt="logo" /> Project Specific Context Files</h3>
                 <div class="context-files-list">
                     <p style="color: var(--vscode-descriptionForeground);">Loading context files...</p>
                 </div>
@@ -789,6 +828,7 @@ Copy this prompt to your clipboard and begin breaking down your task:
     <script>
         const vscode = acquireVsCodeApi();
         let copyToPromptBuilderMode = false;
+        let collapsedFolders = new Set();
 
         window.addEventListener('message', event => {
             const message = event.data;
@@ -986,23 +1026,97 @@ Copy this prompt to your clipboard and begin breaking down your task:
             vscode.postMessage({ command: 'refreshContextFiles' });
         }
 
+        function toggleFolder(folderPath) {
+            if (collapsedFolders.has(folderPath)) {
+                collapsedFolders.delete(folderPath);
+            } else {
+                collapsedFolders.add(folderPath);
+            }
+            
+            // Re-render the folder structure to update the UI
+            reRenderFolderStructure();
+        }
+
+        function expandAllFolders() {
+            collapsedFolders.clear();
+            reRenderFolderStructure();
+        }
+
+        function collapseAllFolders() {
+            // Collect all folder paths from the structure
+            function collectFolderPaths(structure) {
+                const paths = [];
+                if (structure.type === 'folder' && structure.children && structure.children.length > 0) {
+                    paths.push(structure.path);
+                    structure.children.forEach(child => {
+                        paths.push(...collectFolderPaths(child));
+                    });
+                }
+                return paths;
+            }
+            
+            if (window.currentFolderStructure) {
+                const allFolderPaths = collectFolderPaths(window.currentFolderStructure);
+                collapsedFolders.clear();
+                allFolderPaths.forEach(path => collapsedFolders.add(path));
+                reRenderFolderStructure();
+            }
+        }
+
+        function reRenderFolderStructure() {
+            const contextFilesContainer = document.getElementById('contextFilesContainer');
+            if (window.currentFolderStructure && window.currentContextFileTicks) {
+                const contextFilesHTML = \`
+                    <h3>📄 Project Specific Context Files</h3>
+                    <div class="context-header-actions">
+                        <button class="btn secondary" onclick="createContextFolder('')" title="Create new folder">
+                            <span class="icon">📁</span>New Folder
+                        </button>
+                        <button class="btn secondary" onclick="createContextDocument('')" title="Create new document">
+                            <span class="icon">📄</span>New Document
+                        </button>
+                        <button class="btn secondary" onclick="expandAllFolders()" title="Expand all folders">
+                            <span class="icon">📂</span>Expand All
+                        </button>
+                        <button class="btn secondary" onclick="collapseAllFolders()" title="Collapse all folders">
+                            <span class="icon">📁</span>Collapse All
+                        </button>
+                        <button class="btn secondary" onclick="refreshContextFiles()" title="Refresh">
+                            <span class="icon">🔄</span>Refresh
+                        </button>
+                    </div>
+                    <div class="context-folder-tree">
+                        \${renderFolderStructure(window.currentFolderStructure, window.currentContextFileTicks)}
+                    </div>
+                \`;
+                contextFilesContainer.innerHTML = contextFilesHTML;
+            }
+        }
+
         function renderFolderStructure(structure, ticks) {
             if (!structure) return '';
             
             var html = '';
             
             if (structure.type === 'folder') {
+                const isCollapsed = collapsedFolders.has(structure.path);
+                const hasChildren = structure.children && structure.children.length > 0;
+                const toggleIcon = hasChildren ? (isCollapsed ? '▶' : '▼') : '';
+                
                 html += \`<div class="context-folder-item">
-                    <span class="context-folder-icon">📁</span>
-                    <span class="context-folder-name">\${structure.name}</span>
+                    <div class="context-folder-header" onclick="toggleFolder('\${structure.path.replace(/'/g, "\\\\'")}')">
+                        \${hasChildren ? \`<button class="context-folder-toggle \${isCollapsed ? '' : 'expanded'}" onclick="event.stopPropagation(); toggleFolder('\${structure.path.replace(/'/g, "\\\\'")}')">\${toggleIcon}</button>\` : '<span style="width: 16px; display: inline-block;"></span>'}
+                        <span class="context-folder-icon">📁</span>
+                        <span class="context-folder-name">\${structure.name}</span>
+                    </div>
                     <div class="context-folder-actions">
                         <button class="context-add-btn" onclick="createContextFolder('\${structure.path.replace(/'/g, "\\\\'")}')" title="Add subfolder">📁+</button>
                         <button class="context-add-btn" onclick="createContextDocument('\${structure.path.replace(/'/g, "\\\\'")}')" title="Add document">📄+</button>
                     </div>
                 </div>\`;
                 
-                if (structure.children && structure.children.length > 0) {
-                    html += '<div class="context-folder-children">';
+                if (hasChildren) {
+                    html += \`<div class="context-folder-children \${isCollapsed ? 'collapsed' : ''}">\`;
                     structure.children.forEach(function(child) {
                         html += renderFolderStructure(child, ticks);
                     });
@@ -1052,6 +1166,10 @@ Copy this prompt to your clipboard and begin breaking down your task:
             const copyToPromptBuilderToggle = document.getElementById('copyToPromptBuilderToggle');
 
             if (message.contextFolderStructure) {
+                // Store current state for toggle function
+                window.currentFolderStructure = message.contextFolderStructure;
+                window.currentContextFileTicks = message.contextFileTicks || {};
+                
                 const contextFilesHTML = \`
                     <h3>📄 Project Specific Context Files</h3>
                     <div class="context-header-actions">
@@ -1060,6 +1178,12 @@ Copy this prompt to your clipboard and begin breaking down your task:
                         </button>
                         <button class="btn secondary" onclick="createContextDocument('')" title="Create new document">
                             <span class="icon">📄</span>New Document
+                        </button>
+                        <button class="btn secondary" onclick="expandAllFolders()" title="Expand all folders">
+                            <span class="icon">📂</span>Expand All
+                        </button>
+                        <button class="btn secondary" onclick="collapseAllFolders()" title="Collapse all folders">
+                            <span class="icon">📁</span>Collapse All
                         </button>
                         <button class="btn secondary" onclick="refreshContextFiles()" title="Refresh">
                             <span class="icon">🔄</span>Refresh

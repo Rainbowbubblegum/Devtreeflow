@@ -2,7 +2,8 @@
   "name": "devtreeflow",
   "displayName": "DevTreeFlow",
   "description": "AI context management system for structured development workflows",
-  "version": "1.0.2",
+  "version": "1.0.4",
+  "icon": "media/Devtreeflow.PNG",
   "engines": {
     "vscode": "^1.74.0"
   },
