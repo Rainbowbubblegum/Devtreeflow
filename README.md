@@ -1,5 +1,8 @@
 # DevTreeFlow Extension
 
+<img width="1027" height="680" alt="Devtreeflow" src="https://github.com/user-attachments/assets/0a52338d-d891-482b-9614-a3c8de17bba2" />
+
+
 A VS Code/Cursor extension for managing AI-driven development workflows using a structured tree-based context system.
 
 ## Features
