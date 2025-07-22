@@ -8,6 +8,19 @@ A VS Code/Cursor extension for managing AI-driven development workflows using a 
 - **Node Actions**: Right-click on any node to access context-switching commands
 - **Prompt Generation**: Automatically generates and copies prompts to clipboard
 - **Task Management**: Create new task trees and manage development workflows
+- **Context Files**: Manage project-specific context documents with checkbox selection
+  - Click checkboxes, file names, or file icons to toggle selection
+  - Selected context files are automatically included in AI prompts
+  - Hierarchical folder structure with create/open actions
+- **Enhanced Auto-Prompting**: Improved keyboard automation with faster timing
+  - Reduced automation delays for quicker response (300ms vs 500ms)
+  - Auto-prompt from builder automatically sends messages with Enter key
+  - Improved user experience with faster, more reliable automation
+- **Collapsible Task Trees**: Organized tree view with expand/collapse functionality
+  - Trees start collapsed by default to reduce visual clutter
+  - Expand/collapse individual trees or use "Expand All"/"Collapse All" controls
+  - Focus mode to show only one task tree at a time
+  - "Reset Focus" to return to viewing all trees
 
 ## Getting Started
 

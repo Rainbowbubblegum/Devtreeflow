@@ -4,6 +4,10 @@ import * as os from 'os';
 
 export class KeyboardSimulator {
     
+    // Cache the availability check result to avoid repeated system calls
+    private static availabilityCache: boolean | null = null;
+    private static availabilityChecked: boolean = false;
+    
     /**
      * Try to simulate keyboard shortcuts using external processes
      */
@@ -195,8 +199,8 @@ export class KeyboardSimulator {
             console.log(focusSuccess ? '✅ Step 2: Focused AI chat' : '❌ Step 2: Failed to focus AI chat');
             
             // Step 3: Wait for chat to focus
-            console.log('⏳ Step 3: Waiting for chat to focus (500ms)...');
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('⏳ Step 3: Waiting for chat to focus (300ms)...');
+            await new Promise(resolve => setTimeout(resolve, 300));
             console.log('✅ Step 3: Wait completed');
             
             // Step 4: Paste (Ctrl+V)
@@ -221,6 +225,72 @@ export class KeyboardSimulator {
     }
     
     /**
+     * Simulate the full Cursor chat automation sequence WITH Enter key press
+     * This version includes sending the message automatically
+     */
+    public static async simulateCursorChatSequenceWithSend(prompt: string): Promise<boolean> {
+        try {
+            console.log('🎯 DevTreeFlow: Starting Cursor chat automation sequence (focus, paste, send)...');
+            console.log(`📝 Prompt length: ${prompt.length} characters`);
+            // Step 1: Copy prompt to clipboard
+            await vscode.env.clipboard.writeText(prompt);
+            console.log('✅ Step 1: Copied prompt to clipboard');
+            
+            // Step 2: Focus AI chat - Try multiple shortcuts
+            console.log('🔄 Step 2: Focusing AI chat...');
+            let focusSuccess = false;
+            
+            // Try Ctrl+L first (most common Cursor chat shortcut)
+            console.log('Trying Ctrl+L...');
+            focusSuccess = await this.simulateKeyboardShortcut('ctrl+l');
+            
+            if (!focusSuccess) {
+                // Try Ctrl+Shift+L as fallback
+                console.log('Ctrl+L failed, trying Ctrl+Shift+L...');
+                focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+l');
+            }
+            
+            if (!focusSuccess) {
+                // Try Ctrl+Shift+7 as last resort (legacy)
+                console.log('Ctrl+Shift+L failed, trying Ctrl+Shift+7...');
+                focusSuccess = await this.simulateKeyboardShortcut('ctrl+shift+7');
+            }
+            
+            console.log(focusSuccess ? '✅ Step 2: Focused AI chat' : '❌ Step 2: Failed to focus AI chat');
+            
+            // Step 3: Wait for chat to focus
+            console.log('⏳ Step 3: Waiting for chat to focus (300ms)...');
+            await new Promise(resolve => setTimeout(resolve, 300));
+            console.log('✅ Step 3: Wait completed');
+            
+            // Step 4: Paste (Ctrl+V)
+            console.log('🔄 Step 4: Attempting to paste content (Ctrl+V)...');
+            const pasteSuccess = await this.simulateKeyboardShortcut('ctrl+v');
+            console.log(pasteSuccess ? '✅ Step 4: Pasted content' : '❌ Step 4: Failed to paste');
+            
+            // Step 5: Wait a moment then send Enter
+            console.log('⏳ Step 5: Waiting before sending (200ms)...');
+            await new Promise(resolve => setTimeout(resolve, 200));
+            console.log('🔄 Step 5: Sending message (Enter)...');
+            const sendSuccess = await this.simulateKeyboardShortcut('enter');
+            console.log(sendSuccess ? '✅ Step 5: Message sent' : '❌ Step 5: Failed to send');
+            
+            // Summary
+            const successfulSteps = [focusSuccess, pasteSuccess, sendSuccess].filter(Boolean).length;
+            console.log(`📊 Automation Summary: ${successfulSteps}/3 key steps successful (with auto-send)`);
+            
+            if (!focusSuccess) {
+                vscode.window.showWarningMessage('⚠️ Could not focus AI chat. Try: Ctrl+L, Ctrl+Shift+L, or check your Cursor keybindings.');
+            }
+            
+            return focusSuccess && pasteSuccess && sendSuccess;
+        } catch (error) {
+            console.error('💥 DevTreeFlow: Keyboard simulation sequence with send failed:', error);
+            return false;
+        }
+    }
+
+    /**
      * Clear the current chat: focus chat, select all, backspace
      */
     public static async clearCurrentChat(): Promise<boolean> {
@@ -243,44 +313,75 @@ export class KeyboardSimulator {
     }
     
     /**
-     * Check if keyboard simulation is available on this system
+     * Check if keyboard simulation is available on this system (cached)
      */
     public static async isKeyboardSimulationAvailable(): Promise<boolean> {
+        // Return cached result if already checked
+        if (this.availabilityChecked) {
+            return this.availabilityCache || false;
+        }
+
         try {
+            console.log('🔍 DevTreeFlow: Checking keyboard simulation availability (one-time check)...');
             const platform = os.platform();
+            
+            let result: boolean;
             
             switch (platform) {
                 case 'win32':
                     // Check if PowerShell is available
-                    return new Promise((resolve) => {
+                    result = await new Promise((resolve) => {
                         child_process.exec('powershell -Command "Get-Command"', (error) => {
                             resolve(!error);
                         });
                     });
+                    break;
                     
                 case 'darwin':
                     // Check if osascript is available
-                    return new Promise((resolve) => {
+                    result = await new Promise((resolve) => {
                         child_process.exec('which osascript', (error) => {
                             resolve(!error);
                         });
                     });
+                    break;
                     
                 case 'linux':
                     // Check if xdotool is available
-                    return new Promise((resolve) => {
+                    result = await new Promise((resolve) => {
                         child_process.exec('which xdotool', (error) => {
                             resolve(!error);
                         });
                     });
+                    break;
                     
                 default:
-                    return false;
+                    result = false;
             }
+            
+            // Cache the result
+            this.availabilityCache = result;
+            this.availabilityChecked = true;
+            
+            console.log(`✅ DevTreeFlow: Keyboard simulation ${result ? 'available' : 'not available'} (cached for session)`);
+            return result;
+            
         } catch (error) {
             console.error('DevTreeFlow: Error checking keyboard simulation availability:', error);
+            // Cache the error result too
+            this.availabilityCache = false;
+            this.availabilityChecked = true;
             return false;
         }
+    }
+
+    /**
+     * Reset the availability cache (for testing or troubleshooting)
+     */
+    public static resetAvailabilityCache(): void {
+        this.availabilityCache = null;
+        this.availabilityChecked = false;
+        console.log('🔄 DevTreeFlow: Keyboard simulation availability cache reset');
     }
 
     /**

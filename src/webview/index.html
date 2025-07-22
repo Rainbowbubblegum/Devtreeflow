@@ -10,7 +10,7 @@
     <div class="dashboard-header">
         <h1>🌳 DevTreeFlow Dashboard</h1>
         <button class="refresh-btn-top" id="refreshBtnTop">
-            <img src="" class="devtreeflow-logo" alt="logo" />Refresh
+            Refresh
         </button>
     </div>
     <div class="section">
@@ -50,24 +50,31 @@
             </button>
         </div>
     </div>
-    <div class="section">
-        <div class="tree-and-context-row">
-            <div id="treeContainer">
-                <div class="empty-state">
-                    <h2>No DevTreeFlow Structure Found</h2>
-                    <p>Initialize DevTreeFlow to start managing your AI development workflows.</p>
-                    <button class="btn" id="initializeDevTreeFlowBtn">
-                        <span class="icon">🚀</span>Initialize DevTreeFlow
-                    </button>
-                </div>
+    
+    <!-- Tree Section - Full Width -->
+    <div class="section tree-section">
+        <div class="section-header">Task Trees</div>
+        <div id="treeContainer">
+            <div class="empty-state">
+                <h2>No DevTreeFlow Structure Found</h2>
+                <p>Initialize DevTreeFlow to start managing your AI development workflows.</p>
+                <button class="btn" id="initializeDevTreeFlowBtn">
+                    <span class="icon">🚀</span>Initialize DevTreeFlow
+                </button>
             </div>
-            <div id="contextFilesContainer">
+        </div>
+    </div>
+    
+    <!-- Context and Prompt Builder Section - Responsive Layout -->
+    <div class="section context-and-prompt-section">
+        <div class="context-prompt-container">
+            <div id="contextFilesContainer" class="context-panel">
                 <h3>📄 Project Specific Context Files</h3>
                 <div class="context-files-list">
                     <p style="color: var(--vscode-descriptionForeground);">Loading context files...</p>
                 </div>
             </div>
-            <div id="promptBuilderContainer">
+            <div id="promptBuilderContainer" class="prompt-panel">
                 <h3>🛠️ Prompt Builder</h3>
                 <textarea id="promptBuilderTextarea" rows="10" placeholder="Tree/leaf prompts will appear here when you use tree actions with 'Copy to Prompt Builder' mode enabled..."></textarea>
                 <div>
@@ -78,6 +85,7 @@
             </div>
         </div>
     </div>
+    
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
     <script src="main.js"></script>

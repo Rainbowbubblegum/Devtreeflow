@@ -11,6 +11,9 @@ export class AutoPromptService {
     // Global auto-prompting mode state
     private static autoPromptingMode: boolean = false;
     
+    // Reference to dashboard for copyToPromptBuilderMode checks
+    private static dashboard: any = null;
+    
     /**
      * Toggle auto-prompting mode
      */
@@ -26,6 +29,55 @@ export class AutoPromptService {
      */
     public static isAutoPromptingModeEnabled(): boolean {
         return this.autoPromptingMode;
+    }
+
+    /**
+     * Set dashboard reference for copyToPromptBuilderMode checks
+     */
+    public static setDashboard(dashboard: any): void {
+        this.dashboard = dashboard;
+    }
+
+    /**
+     * Central routing method for all auto-prompting actions
+     * Checks copyToPromptBuilderMode and routes accordingly
+     */
+    public static async routePrompt(prompt: string, actionName: string, dashboard?: any): Promise<void> {
+        // Use provided dashboard or stored dashboard reference
+        const activeDashboard = dashboard || this.dashboard;
+        
+        // Check if we have a dashboard with copyToPromptBuilderMode enabled
+        if (activeDashboard && activeDashboard.copyToPromptBuilderMode) {
+            // Route to prompt builder instead of direct prompting
+            console.log(`🔄 Routing "${actionName}" to prompt builder due to copyToPromptBuilderMode`);
+            
+            // Inject prompt into prompt builder with tree prompt markers
+            const existingContent = activeDashboard.promptBuilderContent.replace(/<!--TREE_PROMPT-->.*?<!--END_TREE_PROMPT-->/s, '');
+            activeDashboard.promptBuilderContent = `<!--TREE_PROMPT-->${prompt}<!--END_TREE_PROMPT-->\n\n${existingContent}`;
+            
+            // Update context files if method exists
+            if (activeDashboard.updatePromptBuilderWithContextFiles) {
+                activeDashboard.updatePromptBuilderWithContextFiles();
+            }
+            
+            // Update webview state if method exists
+            if (activeDashboard.updateWebviewState) {
+                activeDashboard.updateWebviewState();
+            }
+            
+            // Show feedback to user
+            vscode.window.showInformationMessage(`📝 "${actionName}" prompt added to Prompt Builder`);
+            return;
+        }
+
+        // Normal auto-prompting flow (not routing to builder)
+        if (this.autoPromptingMode) {
+            await this.sendToCursorChatAutomated(prompt);
+        } else {
+            await this.sendToCursorChat(prompt);
+        }
+        
+        vscode.window.showInformationMessage(`✅ ${actionName} - sent to Cursor chat!`);
     }
     
     /**
@@ -48,15 +100,10 @@ export class AutoPromptService {
             }
 
             const prompt = EnhancedPromptGenerator.generateIdentityPrompt(leafPath);
-            
-            if (this.autoPromptingMode) {
-                await this.sendToCursorChatAutomated(prompt);
-            } else {
-                await this.sendToCursorChat(prompt);
-            }
-            
             const leafName = path.basename(leafPath);
-            vscode.window.showInformationMessage(`Auto-prompted for '${leafName}' - sent to Cursor chat!`);
+            
+            // Use centralized routing that checks copyToPromptBuilderMode
+            await this.routePrompt(prompt, `Current Leaf: ${leafName}`);
             
         } catch (error) {
             console.error('DevTreeFlow: Error in autoPromptCurrentLeaf:', error);
@@ -103,14 +150,10 @@ ${selectedText}
 
 Please consider this code in your response and provide guidance or implementation suggestions based on the selected code.`;
 
-            if (this.autoPromptingMode) {
-                await this.sendToCursorChatAutomated(contextPrompt);
-            } else {
-                await this.sendToCursorChat(contextPrompt);
-            }
-            
             const leafName = path.basename(leafPath);
-            vscode.window.showInformationMessage(`Auto-prompted with context for '${leafName}' - sent to Cursor chat!`);
+            
+            // Use centralized routing that checks copyToPromptBuilderMode
+            await this.routePrompt(contextPrompt, `Context for ${leafName}`);
             
         } catch (error) {
             console.error('DevTreeFlow: Error in autoPromptWithContext:', error);
@@ -138,15 +181,10 @@ Please consider this code in your response and provide guidance or implementatio
             }
 
             const prompt = EnhancedPromptGenerator.generateAssessmentPrompt(leafPath);
-            
-            if (this.autoPromptingMode) {
-                await this.sendToCursorChatAutomated(prompt);
-            } else {
-                await this.sendToCursorChat(prompt);
-            }
-            
             const leafName = path.basename(leafPath);
-            vscode.window.showInformationMessage(`Auto-prompted assessment for '${leafName}' - sent to Cursor chat!`);
+            
+            // Use centralized routing that checks copyToPromptBuilderMode
+            await this.routePrompt(prompt, `Assessment for ${leafName}`);
             
         } catch (error) {
             console.error('DevTreeFlow: Error in autoPromptAssessment:', error);
@@ -174,15 +212,10 @@ Please consider this code in your response and provide guidance or implementatio
             }
 
             const prompt = EnhancedPromptGenerator.generateCorrectionPrompt(leafPath);
-            
-            if (this.autoPromptingMode) {
-                await this.sendToCursorChatAutomated(prompt);
-            } else {
-                await this.sendToCursorChat(prompt);
-            }
-            
             const leafName = path.basename(leafPath);
-            vscode.window.showInformationMessage(`Auto-prompted correction for '${leafName}' - sent to Cursor chat!`);
+            
+            // Use centralized routing that checks copyToPromptBuilderMode
+            await this.routePrompt(prompt, `Correction for ${leafName}`);
             
         } catch (error) {
             console.error('DevTreeFlow: Error in autoPromptCorrection:', error);
@@ -219,15 +252,10 @@ Please consider this code in your response and provide guidance or implementatio
             }
 
             const prompt = EnhancedPromptGenerator.generateRecoveryPrompt(leafPath, issueDescription);
-            
-            if (this.autoPromptingMode) {
-                await this.sendToCursorChatAutomated(prompt);
-            } else {
-                await this.sendToCursorChat(prompt);
-            }
-            
             const leafName = path.basename(leafPath);
-            vscode.window.showInformationMessage(`Auto-prompted recovery for '${leafName}' - sent to Cursor chat!`);
+            
+            // Use centralized routing that checks copyToPromptBuilderMode
+            await this.routePrompt(prompt, `Recovery for ${leafName}`);
             
         } catch (error) {
             console.error('DevTreeFlow: Error in autoPromptRecovery:', error);
@@ -419,6 +447,38 @@ Please consider this code in your response and provide guidance or implementatio
     }
 
     /**
+     * Send prompt to Cursor chat using automated keystrokes (focus, paste, and send)
+     * This version includes pressing Enter to send the message
+     */
+    private static async sendToCursorChatAutomatedWithSend(prompt: string): Promise<void> {
+        try {
+            console.log('DevTreeFlow: Auto-prompting mode ENABLED - using keyboard simulation (focus, paste, send)...');
+            // Check if keyboard simulation is available
+            const isAvailable = await KeyboardSimulator.isKeyboardSimulationAvailable();
+            if (!isAvailable) {
+                console.log('❌ Keyboard simulation not available, using manual fallback');
+                vscode.window.showWarningMessage('⚠️ Keyboard simulation not available on this system. Using manual clipboard method.');
+                await this.sendToCursorChat(prompt);
+                return;
+            }
+            // Use keyboard simulation for focus, paste, and send
+            const success = await KeyboardSimulator.simulateCursorChatSequenceWithSend(prompt);
+            if (success) {
+                console.log('✅ Keyboard simulation with send completed successfully!');
+                vscode.window.showInformationMessage('✅ Prompt sent to AI chat via keyboard simulation!');
+            } else {
+                console.log('❌ Keyboard simulation failed, using manual fallback');
+                vscode.window.showWarningMessage('⚠️ Keyboard simulation failed. Using manual clipboard method.');
+                await this.sendToCursorChat(prompt);
+            }
+        } catch (error) {
+            console.error('DevTreeFlow: Error in automated send with Enter:', error);
+            vscode.window.showErrorMessage(`Automation failed: ${error}. Using manual fallback.`);
+            await this.sendToCursorChat(prompt);
+        }
+    }
+
+    /**
      * Send prompt to Cursor chat using workarounds
      */
     private static async sendToCursorChat(prompt: string): Promise<void> {
@@ -473,6 +533,20 @@ Please consider this code in your response and provide guidance or implementatio
         const automationPromise = this.sendToCursorChatAutomated(prompt);
         // Show feedback as soon as possible (non-blocking)
         vscode.window.showInformationMessage(`Auto Prompting ${actionName}`);
+        // Await automation to ensure errors are handled
+        await automationPromise;
+    }
+
+    /**
+     * Send prompt to chat with automation AND send Enter key (for auto-prompt from builder)
+     */
+    public static async sendPromptToChatWithAutomationAndSend(prompt: string, actionName: string): Promise<void> {
+        // Show immediate feedback that button was pressed
+        vscode.window.showInformationMessage(`🚀 Starting ${actionName} automation...`);
+        
+        // Start automation immediately (includes Enter key press)
+        const automationPromise = this.sendToCursorChatAutomatedWithSend(prompt);
+        
         // Await automation to ensure errors are handled
         await automationPromise;
     }

@@ -75,7 +75,7 @@ export async function handleMessage(message: any, dashboard: any) {
             dashboard.promptBuilderContent = message.content;
             break;
         case 'autoPromptFromBuilder':
-            await handleAutoPromptFromBuilder(dashboard);
+            await handleAutoPromptFromBuilder(dashboard, message.content);
             break;
         case 'treeActionPrompt':
             await handleTreeActionPrompt(message.prompt, dashboard);
@@ -158,11 +158,13 @@ export async function handleNewTaskTree(dashboard: any) {
             await dashboard.handleInitializeDevTreeFlow();
         }
 
-        const prompt = dashboard.generateGenesisPrompt(mainGoal);
+        const prompt = EnhancedPromptGenerator.generateGenesisPrompt(mainGoal);
 
-        if (AutoPromptService.isAutoPromptingModeEnabled()) {
-
-            await AutoPromptService.sendPromptToChatWithAutomation(prompt, 'New Task Tree');
+        // Always use routePrompt which handles both copyToPromptBuilderMode and auto-prompting
+        await AutoPromptService.routePrompt(prompt, 'New Task Tree', dashboard);
+        
+        // Only do AI response handling if we're in auto-prompting mode and NOT in copyToPromptBuilderMode
+        if (AutoPromptService.isAutoPromptingModeEnabled() && !dashboard.copyToPromptBuilderMode) {
             vscode.window.showInformationMessage('Waiting for AI to break down the main goal...');
 
             const aiResponse = await dashboard.getAIResponse();
@@ -175,14 +177,8 @@ export async function handleNewTaskTree(dashboard: any) {
                 } else {
                     vscode.window.showErrorMessage("Failed to parse the AI's task breakdown.");
                 }
-            } else {
-                vscode.window.showErrorMessage('Did not receive a response from the AI.');
             }
-
-
-        } else {
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(`Genesis prompt for "${mainGoal}" copied to clipboard. Paste it to have the AI break it down.`);
+            // Note: If no AI response is provided (user cancels), we silently continue without error
         }
 
         if (dashboard.refreshTreeData) {
@@ -326,11 +322,19 @@ export async function handleOpenNewCursorChatTab() {
     }
 }
 
-export async function handleAutoPromptFromBuilder(dashboard: any) {
+export async function handleAutoPromptFromBuilder(dashboard: any, content?: string) {
+    // Use provided content or fall back to dashboard content
+    const promptContent = content || dashboard.promptBuilderContent;
+    
+    // Update dashboard content if new content was provided
+    if (content) {
+        dashboard.promptBuilderContent = content;
+    }
+    
     if (AutoPromptService.isAutoPromptingModeEnabled()) {
-        await AutoPromptService.sendPromptToChatWithAutomation(dashboard.promptBuilderContent, 'Prompt Builder');
+        await AutoPromptService.sendPromptToChatWithAutomationAndSend(promptContent, 'Prompt Builder');
     } else {
-        await vscode.env.clipboard.writeText(dashboard.promptBuilderContent);
+        await vscode.env.clipboard.writeText(promptContent);
         vscode.window.showInformationMessage('Prompt builder content copied to clipboard!');
     }
 }
@@ -366,11 +370,9 @@ export async function handleTreeActionPrompt(prompt: string, dashboard: any) {
         const existingContent = dashboard.promptBuilderContent.replace(/<!--TREE_PROMPT-->.*?<!--END_TREE_PROMPT-->/s, '');
         dashboard.promptBuilderContent = `<!--TREE_PROMPT-->${actualPrompt}<!--END_TREE_PROMPT-->\n\n${existingContent}`;
         dashboard.updateWebviewState();
-    } else if (AutoPromptService.isAutoPromptingModeEnabled()) {
-        await AutoPromptService.sendPromptToChatWithAutomation(prompt, 'Tree/Leaf Action');
     } else {
-        await vscode.env.clipboard.writeText(prompt);
-        vscode.window.showInformationMessage('Prompt copied to clipboard!');
+        // Use centralized routing for non-copyToPromptBuilder mode
+        await AutoPromptService.routePrompt(prompt, 'Tree/Leaf Action', dashboard);
     }
 }
 
@@ -493,7 +495,7 @@ export async function handleBreakDownSubTasks(nodePath: string, dashboard: any) 
         placeHolder: 'e.g., Break down user authentication implementation'
     });
     if (subTaskGoal) {
-        const prompt = dashboard.generateGenesisPrompt(subTaskGoal);
+        const prompt = EnhancedPromptGenerator.generateGenesisPrompt(subTaskGoal);
         if (AutoPromptService.isAutoPromptingModeEnabled()) {
             await AutoPromptService.sendPromptToChatWithAutomation(prompt, `Break Down Sub-Tasks for ${path.basename(nodePath)}`);
         } else {

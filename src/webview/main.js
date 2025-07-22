@@ -2,6 +2,9 @@ const vscode = acquireVsCodeApi();
 
 let copyToPromptBuilderMode = false;
 let collapsedFolders = new Set();
+let collapsedTrees = new Set(); // Track collapsed task trees
+let focusedTree = null; // Track focused tree (null means show all)
+window.currentTreeData = null; // Store tree data for event handlers
 let currentFolderStructure = null;
 let currentContextFileTicks = {};
 
@@ -35,8 +38,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('initializeDevTreeFlowBtn').addEventListener('click', () => vscode.postMessage({ command: 'initializeDevTreeFlow' }));
     document.getElementById('autoPromptFromBuilderBtn').addEventListener('click', () => {
         const textarea = document.getElementById('promptBuilderTextarea');
-        vscode.postMessage({ command: 'updatePromptBuilder', content: textarea.value });
-        vscode.postMessage({ command: 'autoPromptFromBuilder' });
+        vscode.postMessage({ 
+            command: 'autoPromptFromBuilder', 
+            content: textarea.value 
+        });
     });
     document.getElementById('promptBuilderTextarea').addEventListener('input', function() {
         vscode.postMessage({ command: 'updatePromptBuilder', content: this.value });
@@ -70,6 +75,23 @@ window.addEventListener('message', event => {
 function updateTreeDisplay(data) {
     const container = document.getElementById('treeContainer');
     
+    // Store data globally for event handlers
+    window.currentTreeData = data;
+    
+    // Initialize collapsed state for new trees (default collapsed)
+    if (data.nodes) {
+        data.nodes.forEach(node => {
+            // Only set default collapsed state if tree is not in any state yet
+            if (node.children && node.children.length > 0) {
+                if (!collapsedTrees.has(node.name) && !window.hasInitializedTree?.[node.name]) {
+                    collapsedTrees.add(node.name); // Default to collapsed
+                    if (!window.hasInitializedTree) window.hasInitializedTree = {};
+                    window.hasInitializedTree[node.name] = true;
+                }
+            }
+        });
+    }
+    
     if (!data.hasDevTreeFlow || data.nodes.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -92,13 +114,18 @@ function updateTreeDisplay(data) {
                 <button class="btn secondary" id="showFolderView">📁 Folder View</button>
                 <button class="btn secondary" id="showDiagramView">📊 Diagram View</button>
             </div>
+            <div class="tree-focus-controls">
+                <button class="btn secondary" id="expandAllTreesBtn">📂 Expand All</button>
+                <button class="btn secondary" id="collapseAllTreesBtn">📁 Collapse All</button>
+                <button class="btn secondary" id="resetFocusBtn" ${focusedTree ? '' : 'style="display: none;"'}>🔄 Reset Focus</button>
+            </div>
         </div>
         <div id="folderTreeView">
-            ${data.nodes.map(node => renderNode(node)).join('')}
+            ${data.nodes.map(node => renderTreeNode(node)).join('')}
         </div>
         <div id="diagramTreeView" style="display: none;">
             ${data.nodes.map(node => `
-                <div class="diagram-instance">
+                <div class="diagram-instance" ${focusedTree && focusedTree !== node.name ? 'style="display: none;"' : ''}>
                     <h4>${node.name}</h4>
                     <div id="mermaidContainer_${node.name.replace(/\\W/g, '')}">
                         <div class="mermaid">
@@ -149,9 +176,47 @@ function updateTreeDisplay(data) {
 
     // Set default view
     document.getElementById('showFolderView').classList.add('enabled');
+
+    // Tree control event listeners are added globally, not here
+
+    // Event delegation for tree controls is handled in the global container listener
 }
 
-function renderNode(node, level = 0) {
+function renderTreeNode(node) {
+    // Check if this tree should be shown (focus mode)
+    if (focusedTree && focusedTree !== node.name) {
+        return '';
+    }
+
+    const isCollapsed = collapsedTrees.has(node.name);
+    const hasChildren = node.children && node.children.length > 0;
+    
+    return `
+        <div class="tree-root" data-tree-name="${node.name}">
+            <div class="tree-root-header">
+                <div class="tree-toggle-section">
+                    ${hasChildren ? `<button class="tree-toggle-btn ${isCollapsed ? '' : 'expanded'}" data-tree="${node.name}">${isCollapsed ? '▶' : '▼'}</button>` : '<span class="tree-toggle-spacer"></span>'}
+                    <div class="tree-root-info">
+                        <div class="tree-root-name">${node.name}</div>
+                        <div class="tree-root-status">${node.status.replace('-', ' ')}</div>
+                    </div>
+                </div>
+                <div class="tree-root-actions">
+                    <button class="btn secondary tree-focus-btn" data-tree="${node.name}">🔍 Focus</button>
+                    <button class="btn" data-action="switchToNode">🎯 Switch to Me</button>
+                </div>
+            </div>
+            <div class="tree-root-path">📁 /DevTreeFlow/${node.path}</div>
+            ${hasChildren ? `
+                <div class="tree-children ${isCollapsed ? 'collapsed' : ''}" data-tree="${node.name}">
+                    ${node.children.map(child => renderSubNode(child, 1)).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function renderSubNode(node, level = 1) {
     const statusIcon = {
         'not-started': '⭕',
         'in-progress': '🔄',
@@ -159,7 +224,7 @@ function renderNode(node, level = 0) {
         'unknown': '❓'
     }[node.status] || '❓';
 
-    const indentation = level * 20; // 20px indentation per level
+    const indentation = (level - 1) * 20; // 20px indentation per level (subtract 1 since we start at level 1)
 
     return `
         <div class="tree-node ${node.status}" data-path="${node.path}" style="margin-left: ${indentation}px;">
@@ -176,7 +241,7 @@ function renderNode(node, level = 0) {
             </div>
             ${node.children.length > 0 ? `
                 <div class="node-children">
-                    ${node.children.map(child => renderNode(child, level + 1)).join('')}
+                    ${node.children.map(child => renderSubNode(child, level + 1)).join('')}
                 </div>
             ` : ''}
         </div>
@@ -321,6 +386,35 @@ window.handleDiagramNodeClick = handleDiagramNodeClick;
 
 document.getElementById('treeContainer').addEventListener('click', (event) => {
     const target = event.target;
+    
+    // Handle tree control buttons (expand/collapse/focus)
+    if (target.classList.contains('tree-toggle-btn')) {
+        const treeName = target.dataset.tree;
+        if (collapsedTrees.has(treeName)) {
+            collapsedTrees.delete(treeName);
+        } else {
+            collapsedTrees.add(treeName);
+        }
+        // Refresh the tree display
+        const container = document.getElementById('treeContainer');
+        const currentData = window.currentTreeData; // We need to store this
+        if (currentData) {
+            updateTreeDisplay(currentData);
+        }
+        return;
+    } else if (target.classList.contains('tree-focus-btn')) {
+        const treeName = target.dataset.tree;
+        focusedTree = treeName;
+        // Refresh the tree display
+        const container = document.getElementById('treeContainer');
+        const currentData = window.currentTreeData;
+        if (currentData) {
+            updateTreeDisplay(currentData);
+        }
+        return;
+    }
+    
+    // Handle regular tree node action buttons
     if (target.tagName === 'BUTTON' && target.dataset.action) {
         const nodeElement = target.closest('.tree-node');
         if (nodeElement) {
@@ -338,6 +432,26 @@ document.getElementById('treeContainer').addEventListener('click', (event) => {
                     nodePath: nodePath
                 });
             }
+        }
+    }
+});
+
+// Global event listeners for tree control buttons
+document.addEventListener('click', (event) => {
+    if (event.target.id === 'expandAllTreesBtn') {
+        collapsedTrees.clear();
+        if (window.currentTreeData) {
+            updateTreeDisplay(window.currentTreeData);
+        }
+    } else if (event.target.id === 'collapseAllTreesBtn') {
+        if (window.currentTreeData && window.currentTreeData.nodes) {
+            window.currentTreeData.nodes.forEach(node => collapsedTrees.add(node.name));
+            updateTreeDisplay(window.currentTreeData);
+        }
+    } else if (event.target.id === 'resetFocusBtn') {
+        focusedTree = null;
+        if (window.currentTreeData) {
+            updateTreeDisplay(window.currentTreeData);
         }
     }
 });
@@ -473,6 +587,12 @@ document.getElementById('contextFilesContainer').addEventListener('click', (even
         vscode.postMessage({ command: 'openContextFile', filename: path });
     } else if (target.classList.contains('context-file-checkbox')) {
         vscode.postMessage({ command: 'toggleContextFileTick', filename: path });
+    } else if ((target.classList.contains('context-folder-name') || target.classList.contains('context-folder-icon')) && target.closest('.context-folder-item').querySelector('.context-file-checkbox')) {
+        // Handle clicking on the file name label or file icon to toggle checkbox
+        const fileItem = target.closest('.context-folder-item');
+        const checkbox = fileItem.querySelector('.context-file-checkbox');
+        const filePath = checkbox.dataset.path;
+        vscode.postMessage({ command: 'toggleContextFileTick', filename: filePath });
     }
 });
 

@@ -59,50 +59,70 @@ body {
 .modes-row label, .chat-controls-row button, .tree-controls-row button {
     margin-right: 8px;
 }
-.tree-and-context-row {
+
+/* Tree Section - Full Width */
+.tree-section {
+    width: calc(100% - 48px);
+}
+
+.tree-section #treeContainer {
+    width: 100%;
+    min-height: 400px;
+}
+
+/* Context and Prompt Builder Section - Responsive Layout */
+.context-and-prompt-section {
+    width: calc(100% - 48px);
+}
+
+.context-prompt-container {
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    align-items: stretch;
+    gap: 20px;
     width: 100%;
 }
 
-/* Only use horizontal layout on very wide screens */
-@media (min-width: 1400px) {
-    .tree-and-context-row {
+.context-panel,
+.prompt-panel {
+    width: 100%;
+    min-height: 300px;
+}
+
+/* Responsive breakpoint for larger screens */
+@media (min-width: 1200px) {
+    .context-prompt-container {
         flex-direction: row;
-        gap: 32px;
-        align-items: flex-start;
+        gap: 24px;
     }
     
-    #treeContainer {
-        flex: 2;
-        min-width: 350px;
-        max-width: 50%;
-    }
-    
-    #contextFilesContainer {
+    .context-panel {
         flex: 1;
-        min-width: 220px;
-        max-width: 25%;
+        min-width: 300px;
+        max-width: 40%;
     }
     
-    #promptBuilderContainer {
-        flex: 2;
-        min-width: 350px;
-        max-width: 50%;
+    .prompt-panel {
+        flex: 1.5;
+        min-width: 400px;
+        max-width: 60%;
     }
 }
 
+/* Remove old layout styles */
+.tree-and-context-row {
+    display: none; /* This class is no longer used */
+}
+
+/* Update container styles for new layout */
 #treeContainer {
     width: 100%;
-    margin-bottom: 24px;
-    min-height: 200px;
+    margin-bottom: 0;
+    min-height: 400px;
 }
 
 #contextFilesContainer {
     width: 100%;
-    margin-bottom: 24px;
+    margin-bottom: 0;
     margin-top: 0;
     min-height: 200px;
 }
@@ -112,6 +132,7 @@ body {
     margin-top: 0;
     min-height: 200px;
 }
+
 .context-files-list label {
     display: block;
     margin-bottom: 6px;
@@ -166,6 +187,17 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Make file names and icons clickable to toggle checkboxes */
+.context-folder-item .context-file-checkbox + .context-folder-icon,
+.context-folder-item .context-file-checkbox + .context-folder-icon + .context-folder-name {
+    cursor: pointer;
+}
+
+.context-folder-item .context-file-checkbox + .context-folder-icon:hover,
+.context-folder-item .context-file-checkbox + .context-folder-icon + .context-folder-name:hover {
+    color: var(--vscode-textLink-foreground);
 }
 .context-folder-actions {
     display: none;
@@ -268,6 +300,119 @@ textarea {
     background-color: var(--vscode-terminal-ansiBrightGreen);
 }
 
+/* Tree control styles */
+.tree-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.tree-view-toggles, .tree-focus-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tree-focus-controls .btn {
+    font-size: 11px;
+    padding: 6px 12px;
+}
+
+/* Tree root styles */
+.tree-root {
+    margin: 16px 0;
+    padding: 16px;
+    background-color: var(--vscode-list-inactiveSelectionBackground);
+    border-radius: 8px;
+    border-left: 4px solid var(--vscode-textLink-foreground);
+    border: 2px solid var(--vscode-panel-border);
+}
+
+.tree-root-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.tree-toggle-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tree-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 14px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+.tree-toggle-btn:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.tree-toggle-btn.expanded {
+    transform: rotate(0deg);
+}
+
+.tree-toggle-spacer {
+    width: 32px;
+    display: inline-block;
+}
+
+.tree-root-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tree-root-name {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--vscode-titleBar-activeForeground);
+}
+
+.tree-root-status {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    text-transform: capitalize;
+}
+
+.tree-root-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.tree-focus-btn {
+    font-size: 11px;
+    padding: 6px 10px;
+}
+
+.tree-root-path {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 12px;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.tree-children {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.tree-children.collapsed {
+    display: none;
+}
+
 /* Tree node styles */
 .empty-state {
     text-align: center;
@@ -348,43 +493,6 @@ textarea {
 }
 .icon {
     margin-right: 5px;
-}
-
-/* Remove the old problematic media query */
-@media (max-width: 1399px) {
-    .tree-and-context-row {
-        flex-direction: column;
-    }
-    
-    #promptBuilderContainer, #contextFilesContainer, #treeContainer {
-        min-width: 0;
-        width: 100%;
-        flex: none;
-    }
-}
-.devtreeflow-logo {
-    height: 18px;
-    width: 18px;
-    vertical-align: middle;
-    margin-right: 4px;
-} 
-
-/* Tree header and view toggles */
-.tree-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}
-
-.tree-view-toggles {
-    display: flex;
-    gap: 8px;
-}
-
-.tree-view-toggles .btn {
-    padding: 6px 12px;
-    font-size: 11px;
 }
 
 /* Diagram specific styles */
@@ -539,4 +647,9 @@ textarea {
     margin-left: 10px;
 }
 
-.tree-node .node-header { 
+.tree-node .node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+} 
