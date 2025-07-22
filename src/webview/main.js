@@ -33,8 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('newChatTabBtn').addEventListener('click', () => vscode.postMessage({ command: 'openNewCursorChatTab' }));
     document.getElementById('clearChatBtn').addEventListener('click', () => vscode.postMessage({ command: 'clearCurrentChat' }));
     document.getElementById('newTaskTreeBtn').addEventListener('click', () => vscode.postMessage({ command: 'newTaskTree' }));
-    document.getElementById('createTreeFromAIResponseBtn').addEventListener('click', () => vscode.postMessage({ command: 'createTreeFromAIResponse' }));
-    document.getElementById('testButton').addEventListener('click', () => alert('Button works!'));
     document.getElementById('initializeDevTreeFlowBtn').addEventListener('click', () => vscode.postMessage({ command: 'initializeDevTreeFlow' }));
     document.getElementById('autoPromptFromBuilderBtn').addEventListener('click', () => {
         const textarea = document.getElementById('promptBuilderTextarea');
@@ -124,10 +122,14 @@ function updateTreeDisplay(data) {
             ${data.nodes.map(node => renderTreeNode(node)).join('')}
         </div>
         <div id="diagramTreeView" style="display: none;">
-            ${data.nodes.map(node => `
-                <div class="diagram-instance" ${focusedTree && focusedTree !== node.name ? 'style="display: none;"' : ''}>
+            ${data.nodes.map((node, index) => `
+                <div class="diagram-instance" ${focusedTree && focusedTree !== node.name ? 'style="display: none;"' : ''} data-diagram-index="${index}">
                     <h4>${node.name}</h4>
-                    <div id="mermaidContainer_${node.name.replace(/\\W/g, '')}">
+                    <div class="diagram-controls">
+                        <button class="btn secondary" onclick="focusSingleDiagram('${node.name}')">Focus This Diagram</button>
+                        <button class="btn secondary" onclick="showAllDiagrams()">Show All</button>
+                    </div>
+                    <div id="mermaidContainer_${node.name.replace(/\\W/g, '')}" class="mermaid-container">
                         <div class="mermaid">
                             ${generateMermaidDiagram(node)}
                         </div>
@@ -143,6 +145,9 @@ function updateTreeDisplay(data) {
         document.getElementById('diagramTreeView').style.display = 'none';
         document.getElementById('showFolderView').classList.add('enabled');
         document.getElementById('showDiagramView').classList.remove('enabled');
+        
+        // Clean up any pan-zoom instances when switching away from diagram view
+        cleanupPanZoomInstances();
     });
 
     document.getElementById('showDiagramView').addEventListener('click', () => {
@@ -151,27 +156,8 @@ function updateTreeDisplay(data) {
         document.getElementById('showFolderView').classList.remove('enabled');
         document.getElementById('showDiagramView').classList.add('enabled');
         
-        // Initialize Mermaid for the diagram
-        if (typeof mermaid !== 'undefined') {
-            mermaid.init();
-            // Initialize svg-pan-zoom for each diagram
-            data.nodes.forEach(node => {
-                const containerId = `#mermaidContainer_${node.name.replace(/\\W/g, '')} svg`;
-                const svgElement = document.querySelector(containerId);
-                if (svgElement) {
-                    const panZoomInstance = svgPanZoom(svgElement, {
-                        zoomEnabled: true,
-                        controlIconsEnabled: false,
-                        fit: true,
-                        center: true,
-                    });
-
-                    document.getElementById('zoomInBtn').addEventListener('click', () => panZoomInstance.zoomIn());
-                    document.getElementById('zoomOutBtn').addEventListener('click', () => panZoomInstance.zoomOut());
-                    document.getElementById('resetZoomBtn').addEventListener('click', () => panZoomInstance.resetZoom());
-                }
-            });
-        }
+        // Initialize Mermaid and pan-zoom with improved timing and error handling
+        initializeMermaidWithPanZoom(data.nodes);
     });
 
     // Set default view
@@ -383,6 +369,327 @@ function showActionMenu(menu, nodePath, actions) {
 
 // Make function globally available for Mermaid click handlers
 window.handleDiagramNodeClick = handleDiagramNodeClick;
+
+// Improved Mermaid and pan-zoom initialization function
+function initializeMermaidWithPanZoom(nodes) {
+    console.log('Initializing Mermaid with pan-zoom for nodes:', nodes);
+    
+    // Check if required libraries are available
+    if (typeof mermaid === 'undefined') {
+        console.error('Mermaid library not available');
+        return;
+    }
+    
+    if (typeof svgPanZoom === 'undefined') {
+        console.error('svg-pan-zoom library not available');
+        return;
+    }
+
+    // Initialize mermaid first
+    try {
+        mermaid.init();
+        console.log('Mermaid initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize Mermaid:', error);
+        return;
+    }
+
+    // Use MutationObserver to detect when SVG elements are rendered
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList') {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Check if this is an SVG element or contains SVG elements
+                        const svgElements = node.tagName === 'svg' ? [node] : node.querySelectorAll ? node.querySelectorAll('svg') : [];
+                        svgElements.forEach(svgElement => {
+                            if (!svgElement.dataset.panZoomInitialized) {
+                                // Find the container for this SVG
+                                const container = svgElement.closest('[id^="mermaidContainer_"]');
+                                if (container) {
+                                    const containerIdMatch = container.id.match(/mermaidContainer_(.+)/);
+                                    if (containerIdMatch) {
+                                        const nodeName = containerIdMatch[1];
+                                        console.log(`Detected SVG render for node: ${nodeName}`);
+                                        
+                                        // Small delay to ensure SVG is fully rendered
+                                        setTimeout(() => {
+                                            initializePanZoomForSVG(svgElement, container, nodeName);
+                                        }, 100);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    });
+
+    // Start observing the diagram tree view
+    const diagramTreeView = document.getElementById('diagramTreeView');
+    if (diagramTreeView) {
+        observer.observe(diagramTreeView, {
+            childList: true,
+            subtree: true
+        });
+        
+        // Stop observing after 10 seconds to prevent memory leaks
+        setTimeout(() => {
+            observer.disconnect();
+            console.log('SVG observer disconnected');
+        }, 10000);
+    }
+
+    // Fallback: try to initialize pan-zoom after a delay for any existing SVG elements
+    setTimeout(() => {
+        nodes.forEach(node => {
+            const containerId = `mermaidContainer_${node.name.replace(/\W/g, '')}`;
+            const container = document.getElementById(containerId);
+            const svgElement = container ? container.querySelector('svg') : null;
+            
+            if (svgElement && !svgElement.dataset.panZoomInitialized) {
+                console.log(`Fallback initialization for: ${node.name}`);
+                initializePanZoomForSVG(svgElement, container, node.name);
+            }
+        });
+    }, 1500);
+}
+
+// Separate function to initialize pan-zoom for a specific SVG element
+function initializePanZoomForSVG(svgElement, container, nodeName) {
+    try {
+        console.log(`Initializing pan-zoom for: ${nodeName}`);
+        
+        // Ensure the container has proper dimensions
+        const containerRect = container.getBoundingClientRect();
+        if (containerRect.width === 0 || containerRect.height === 0) {
+            console.warn(`Container has zero dimensions for ${nodeName}, retrying...`);
+            // Retry after a short delay
+            setTimeout(() => {
+                const newRect = container.getBoundingClientRect();
+                if (newRect.width > 0 && newRect.height > 0) {
+                    initializePanZoomForSVG(svgElement, container, nodeName);
+                }
+            }, 500);
+            return;
+        }
+        
+        // Clean up any existing pan-zoom instance
+        if (svgElement.panZoomInstance) {
+            svgElement.panZoomInstance.destroy();
+            delete svgElement.panZoomInstance;
+        }
+        
+        // Remove any existing transforms that might interfere
+        svgElement.style.transform = '';
+        svgElement.removeAttribute('transform');
+        
+        // Force SVG to use full container space
+        svgElement.style.width = '100%';
+        svgElement.style.height = '100%';
+        svgElement.style.minWidth = '300px';
+        svgElement.style.minHeight = '200px';
+        svgElement.style.maxWidth = 'none';
+        svgElement.style.maxHeight = 'none';
+        
+        // Configure preserveAspectRatio for better stretching
+        svgElement.removeAttribute('preserveAspectRatio');
+        svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        
+        // Force viewBox to match container if needed
+        const containerDimensions = container.getBoundingClientRect();
+        const currentViewBox = svgElement.getAttribute('viewBox');
+        if (currentViewBox) {
+            const viewBoxParts = currentViewBox.split(' ');
+            if (viewBoxParts.length === 4) {
+                // Keep the original aspect ratio but expand to container
+                const originalWidth = parseFloat(viewBoxParts[2]);
+                const originalHeight = parseFloat(viewBoxParts[3]);
+                const containerAspect = containerDimensions.width / containerDimensions.height;
+                const originalAspect = originalWidth / originalHeight;
+                
+                let newWidth = originalWidth;
+                let newHeight = originalHeight;
+                
+                if (containerAspect > originalAspect) {
+                    // Container is wider, expand width
+                    newWidth = originalHeight * containerAspect;
+                } else {
+                    // Container is taller, expand height  
+                    newHeight = originalWidth / containerAspect;
+                }
+                
+                // Set new viewBox with expanded dimensions
+                svgElement.setAttribute('viewBox', `${viewBoxParts[0]} ${viewBoxParts[1]} ${newWidth} ${newHeight}`);
+            }
+        }
+        
+        // Configure the container to ensure proper sizing
+        container.style.display = 'block';
+        container.style.position = 'relative';
+        
+        // Configure pan-zoom with optimized settings for full container usage
+        const panZoomInstance = svgPanZoom(svgElement, {
+            zoomEnabled: true,
+            controlIconsEnabled: true,
+            fit: true, // Start with fit to show full content
+            center: true, // Center the content initially
+            minZoom: 0.1,
+            maxZoom: 10,
+            mouseWheelZoomEnabled: true,
+            preventMouseEventsDefault: false, // Allow some mouse events to pass through
+            panEnabled: true,
+            dblClickZoomEnabled: true,
+            zoomScaleSensitivity: 0.1,
+            contain: false, // Allow panning outside the initial viewBox
+            beforeZoom: function(oldScale, newScale) {
+                // Allow zoom
+                return true;
+            },
+            beforePan: function(oldPan, newPan) {
+                // Allow pan throughout the entire container space
+                return true;
+            },
+            onZoom: function(scale) {
+                // Optional: Add zoom feedback
+                console.log(`Zoom level: ${scale}`);
+            }
+        });
+        
+        // Force the SVG to use full container width after pan-zoom initialization
+        setTimeout(() => {
+            if (panZoomInstance && svgElement) {
+                // Get the current zoom and pan state
+                const zoom = panZoomInstance.getZoom();
+                const pan = panZoomInstance.getPan();
+                
+                // Reset and configure for full width usage
+                panZoomInstance.resetZoom();
+                panZoomInstance.resetPan();
+                
+                // Force SVG to fill container width by adjusting the zoom
+                const containerWidth = containerDimensions.width - 16; // Account for padding
+                const svgWidth = svgElement.getBBox ? svgElement.getBBox().width : svgElement.clientWidth;
+                
+                if (svgWidth > 0 && containerWidth > 0) {
+                    const scaleToFitWidth = containerWidth / svgWidth;
+                    panZoomInstance.zoom(scaleToFitWidth);
+                    panZoomInstance.center();
+                }
+                
+                console.log(`SVG resized to container width for: ${nodeName}`, {
+                    containerWidth,
+                    svgWidth,
+                    appliedScale: containerWidth / svgWidth
+                });
+            }
+        }, 100);
+        
+        // Mark as initialized and store instance
+        svgElement.dataset.panZoomInitialized = 'true';
+        svgElement.panZoomInstance = panZoomInstance;
+        
+        // Add specialized event handling for wheel events
+        const wheelHandler = function(e) {
+            // Only prevent default if the event is actually on the SVG
+            if (e.target.closest('svg') === svgElement) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        
+        container.addEventListener('wheel', wheelHandler, { passive: false });
+        
+        // Store the handler for cleanup
+        container._wheelHandler = wheelHandler;
+        
+        console.log(`Pan-zoom initialized successfully for: ${nodeName}`, {
+            containerDimensions: containerRect,
+            svgDimensions: {
+                width: svgElement.clientWidth,
+                height: svgElement.clientHeight,
+                viewBox: svgElement.getAttribute('viewBox'),
+                actualStyleWidth: svgElement.style.width,
+                actualStyleHeight: svgElement.style.height
+            },
+            panZoomEnabled: true,
+            panZoomViewport: panZoomInstance ? {
+                width: panZoomInstance.getSizes().width,
+                height: panZoomInstance.getSizes().height,
+                viewBox: panZoomInstance.getSizes().viewBox
+            } : 'not available'
+        });
+        
+    } catch (error) {
+        console.error(`Failed to initialize pan-zoom for ${nodeName}:`, error);
+    }
+}
+
+// Cleanup function to destroy all pan-zoom instances
+function cleanupPanZoomInstances() {
+    const allSVGs = document.querySelectorAll('[id^="mermaidContainer_"] svg');
+    allSVGs.forEach(svg => {
+        if (svg.panZoomInstance) {
+            try {
+                svg.panZoomInstance.destroy();
+                delete svg.panZoomInstance;
+                svg.removeAttribute('data-pan-zoom-initialized');
+                console.log('Cleaned up pan-zoom instance for SVG');
+            } catch (error) {
+                console.warn('Error cleaning up pan-zoom instance:', error);
+            }
+        }
+        
+        // Clean up wheel event handlers
+        const container = svg.closest('[id^="mermaidContainer_"]');
+        if (container && container._wheelHandler) {
+            container.removeEventListener('wheel', container._wheelHandler);
+            delete container._wheelHandler;
+        }
+    });
+}
+
+// Global functions for diagram management
+window.focusSingleDiagram = function(diagramName) {
+    console.log('Focusing single diagram:', diagramName);
+    document.querySelectorAll('.diagram-instance').forEach(instance => {
+        const title = instance.querySelector('h4').textContent;
+        if (title === diagramName) {
+            instance.style.display = 'block';
+            // Ensure pan-zoom is initialized for the focused diagram
+            const container = instance.querySelector('[id^="mermaidContainer_"]');
+            const svg = container ? container.querySelector('svg') : null;
+            if (svg && !svg.dataset.panZoomInitialized) {
+                setTimeout(() => {
+                    initializePanZoomForSVG(svg, container, diagramName);
+                }, 100);
+            }
+        } else {
+            instance.style.display = 'none';
+        }
+    });
+};
+
+window.showAllDiagrams = function() {
+    console.log('Showing all diagrams');
+    document.querySelectorAll('.diagram-instance').forEach(instance => {
+        instance.style.display = 'block';
+        // Ensure pan-zoom is initialized for all visible diagrams
+        const container = instance.querySelector('[id^="mermaidContainer_"]');
+        const svg = container ? container.querySelector('svg') : null;
+        if (svg && !svg.dataset.panZoomInitialized) {
+            const title = instance.querySelector('h4').textContent;
+            setTimeout(() => {
+                initializePanZoomForSVG(svg, container, title);
+            }, 100);
+        }
+    });
+};
+
+
+
+
 
 document.getElementById('treeContainer').addEventListener('click', (event) => {
     const target = event.target;
