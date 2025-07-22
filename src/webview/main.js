@@ -43,7 +43,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     document.getElementById('promptBuilderTextarea').addEventListener('input', function() {
         vscode.postMessage({ command: 'updatePromptBuilder', content: this.value });
+        updateCharacterCount();
+        if (isPreviewMode) {
+            updateMarkdownPreview();
+        }
     });
+
+    // Initialize enhanced prompt builder features
+    initializePromptBuilderFeatures();
 
     vscode.postMessage({ command: 'webviewReady' });
     console.log('DevTreeFlow WebView: webviewReady sent');
@@ -942,4 +949,180 @@ function reRenderFolderStructure() {
             container.innerHTML = renderFolderStructure(currentFolderStructure, currentContextFileTicks);
         }
     }
+}
+
+// Enhanced Prompt Builder Features
+let isPreviewMode = false;
+let isExpanded = false;
+
+function initializePromptBuilderFeatures() {
+    console.log('Initializing enhanced prompt builder features...');
+    
+    // Clear button
+    document.getElementById('clearPromptBtn').addEventListener('click', () => {
+        const textarea = document.getElementById('promptBuilderTextarea');
+        textarea.value = '';
+        updateCharacterCount();
+        vscode.postMessage({ command: 'updatePromptBuilder', content: '' });
+        if (isPreviewMode) updateMarkdownPreview();
+    });
+    
+    // Copy button
+    document.getElementById('copyPromptBtn').addEventListener('click', () => {
+        const textarea = document.getElementById('promptBuilderTextarea');
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            showToast('Copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            showToast('Copy failed', 'error');
+        });
+    });
+    
+    // Save button
+    document.getElementById('savePromptBtn').addEventListener('click', () => {
+        const content = document.getElementById('promptBuilderTextarea').value;
+        vscode.postMessage({ command: 'savePromptToFile', content: content });
+    });
+    
+    // Toolbar buttons
+    document.getElementById('insertHeadingBtn').addEventListener('click', () => insertText('# Heading\n\n'));
+    document.getElementById('insertCodeBlockBtn').addEventListener('click', () => insertText('```\ncode here\n```\n\n'));
+    document.getElementById('insertListBtn').addEventListener('click', () => insertText('• List item 1\n• List item 2\n• List item 3\n\n'));
+    document.getElementById('insertLinkBtn').addEventListener('click', () => insertText('[Link text](URL)\n\n'));
+    
+    // Toggle preview
+    document.getElementById('togglePreviewBtn').addEventListener('click', togglePreview);
+    
+    // Expand/collapse
+    document.getElementById('expandTextareaBtn').addEventListener('click', toggleExpand);
+    
+    // Initialize character count
+    updateCharacterCount();
+    
+    // Setup markdown preview if marked is available
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            sanitize: false
+        });
+    }
+}
+
+function insertText(text) {
+    const textarea = document.getElementById('promptBuilderTextarea');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+    
+    textarea.value = value.substring(0, start) + text + value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + text.length;
+    textarea.focus();
+    
+    // Update content
+    vscode.postMessage({ command: 'updatePromptBuilder', content: textarea.value });
+    updateCharacterCount();
+    if (isPreviewMode) updateMarkdownPreview();
+}
+
+function updateCharacterCount() {
+    const textarea = document.getElementById('promptBuilderTextarea');
+    const count = textarea.value.length;
+    document.getElementById('characterCount').textContent = count;
+}
+
+function togglePreview() {
+    const button = document.getElementById('togglePreviewBtn');
+    const textarea = document.getElementById('promptBuilderTextarea');
+    const preview = document.getElementById('promptPreview');
+    
+    isPreviewMode = !isPreviewMode;
+    
+    if (isPreviewMode) {
+        button.classList.add('active');
+        textarea.style.display = 'none';
+        preview.classList.remove('hidden');
+        updateMarkdownPreview();
+    } else {
+        button.classList.remove('active');
+        textarea.style.display = 'block';
+        preview.classList.add('hidden');
+    }
+}
+
+function updateMarkdownPreview() {
+    const textarea = document.getElementById('promptBuilderTextarea');
+    const preview = document.getElementById('promptPreview');
+    
+    if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+        const markdown = textarea.value;
+        const html = marked.parse(markdown);
+        const clean = DOMPurify.sanitize(html);
+        preview.innerHTML = clean;
+    } else {
+        // Fallback simple rendering
+        const content = textarea.value
+            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+            .replace(/\*(.*)\*/gim, '<em>$1</em>')
+            .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+            .replace(/`([^`]*)`/gim, '<code>$1</code>')
+            .replace(/^\* (.*$)/gim, '<li>$1</li>')
+            .replace(/^\• (.*$)/gim, '<li>$1</li>')
+            .replace(/\n/gim, '<br>');
+        
+        preview.innerHTML = content;
+    }
+}
+
+function toggleExpand() {
+    const button = document.getElementById('expandTextareaBtn');
+    const content = document.querySelector('.prompt-builder-content');
+    
+    isExpanded = !isExpanded;
+    
+    if (isExpanded) {
+        button.classList.add('active');
+        content.classList.add('expanded');
+        button.innerHTML = '<span class="icon">⛶</span>Collapse';
+    } else {
+        button.classList.remove('active');
+        content.classList.remove('expanded');
+        button.innerHTML = '<span class="icon">⛶</span>Expand';
+    }
+}
+
+function showToast(message, type = 'success') {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    
+    // Style the toast
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? 'var(--vscode-errorForeground)' : 'var(--vscode-terminal-ansiGreen)'};
+        color: var(--vscode-button-foreground);
+        padding: 8px 16px;
+        border-radius: 4px;
+        z-index: 10000;
+        font-size: 12px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.style.opacity = '1', 10);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
 } 

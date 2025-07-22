@@ -260,18 +260,234 @@ body {
     gap: 8px;
     margin-bottom: 12px;
 }
+/* Enhanced Prompt Builder Styles */
+.prompt-builder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.prompt-builder-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.btn.small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.prompt-builder-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px 4px 0 0;
+    padding: 6px 8px;
+    margin-bottom: 0;
+}
+
+.toolbar-group {
+    display: flex;
+    gap: 4px;
+}
+
+.toolbar-btn {
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: none;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    transition: background-color 0.2s ease;
+}
+
+.toolbar-btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.toolbar-btn.active {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.prompt-builder-content {
+    position: relative;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 0 0 4px 4px;
+    background: var(--vscode-input-background);
+}
+
 textarea {
     width: 100%;
-    min-height: 120px;
-    font-family: var(--vscode-editor-font-family, monospace);
+    min-height: 200px;
+    font-family: var(--vscode-editor-font-family, 'Fira Code', 'Cascadia Code', monospace);
     font-size: 13px;
-    background: var(--vscode-input-background);
+    line-height: 1.6;
+    background: transparent;
     color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-input-border);
-    border-radius: 4px;
-    margin-bottom: 8px;
-    padding: 8px;
+    border: none;
+    border-radius: 0 0 4px 4px;
+    margin-bottom: 0;
+    padding: 12px;
     box-sizing: border-box;
+    resize: vertical;
+    tab-size: 4;
+    white-space: pre-wrap;
+}
+
+textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+}
+
+/* Markdown syntax highlighting in textarea */
+textarea::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.prompt-builder-content.expanded textarea {
+    min-height: 400px;
+}
+
+.prompt-preview {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--vscode-editor-background);
+    padding: 12px;
+    overflow-y: auto;
+    font-family: var(--vscode-font-family);
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 0 0 4px 4px;
+}
+
+.prompt-preview.hidden {
+    display: none;
+}
+
+.prompt-builder-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.character-count {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+/* Markdown Preview Styles */
+.prompt-preview h1,
+.prompt-preview h2,
+.prompt-preview h3,
+.prompt-preview h4,
+.prompt-preview h5,
+.prompt-preview h6 {
+    color: var(--vscode-titleBar-activeForeground);
+    margin: 16px 0 8px 0;
+    font-weight: bold;
+}
+
+.prompt-preview h1 { font-size: 1.5em; border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 4px; }
+.prompt-preview h2 { font-size: 1.3em; }
+.prompt-preview h3 { font-size: 1.1em; }
+
+.prompt-preview p {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+.prompt-preview ul,
+.prompt-preview ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.prompt-preview li {
+    margin: 4px 0;
+}
+
+.prompt-preview code {
+    background: var(--vscode-textCodeBlock-background);
+    color: var(--vscode-textPreformat-foreground);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+}
+
+.prompt-preview pre {
+    background: var(--vscode-textCodeBlock-background);
+    color: var(--vscode-textPreformat-foreground);
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--vscode-panel-border);
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.prompt-preview pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+
+.prompt-preview blockquote {
+    border-left: 4px solid var(--vscode-textLink-foreground);
+    margin: 12px 0;
+    padding: 8px 16px;
+    background: var(--vscode-textBlockQuote-background);
+    color: var(--vscode-textBlockQuote-foreground);
+    font-style: italic;
+}
+
+.prompt-preview a {
+    color: var(--vscode-textLink-foreground);
+    text-decoration: none;
+}
+
+.prompt-preview a:hover {
+    text-decoration: underline;
+}
+
+.prompt-preview table {
+    border-collapse: collapse;
+    margin: 12px 0;
+    width: 100%;
+}
+
+.prompt-preview th,
+.prompt-preview td {
+    border: 1px solid var(--vscode-panel-border);
+    padding: 6px 12px;
+    text-align: left;
+}
+
+.prompt-preview th {
+    background: var(--vscode-panel-background);
+    font-weight: bold;
+}
+
+.prompt-preview hr {
+    border: none;
+    border-top: 1px solid var(--vscode-panel-border);
+    margin: 16px 0;
 }
 .btn {
     background-color: var(--vscode-button-background);

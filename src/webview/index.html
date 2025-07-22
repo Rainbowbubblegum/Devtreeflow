@@ -69,9 +69,58 @@
                 </div>
             </div>
             <div id="promptBuilderContainer" class="prompt-panel">
-                <h3>🛠️ Prompt Builder</h3>
-                <textarea id="promptBuilderTextarea" rows="10" placeholder="Tree/leaf prompts will appear here when you use tree actions with 'Copy to Prompt Builder' mode enabled..."></textarea>
-                <div>
+                <div class="prompt-builder-header">
+                    <h3>🛠️ Prompt Builder</h3>
+                    <div class="prompt-builder-controls">
+                        <button class="btn secondary small" id="clearPromptBtn" title="Clear all content">
+                            <span class="icon">🗑️</span>Clear
+                        </button>
+                        <button class="btn secondary small" id="copyPromptBtn" title="Copy to clipboard">
+                            <span class="icon">📋</span>Copy
+                        </button>
+                        <button class="btn secondary small" id="savePromptBtn" title="Save to file">
+                            <span class="icon">💾</span>Save
+                        </button>
+                    </div>
+                </div>
+                <div class="prompt-builder-toolbar">
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="insertHeadingBtn" title="Insert Heading">
+                            <span class="icon">📝</span>H1
+                        </button>
+                        <button class="toolbar-btn" id="insertCodeBlockBtn" title="Insert Code Block">
+                            <span class="icon">💻</span>Code
+                        </button>
+                        <button class="toolbar-btn" id="insertListBtn" title="Insert List">
+                            <span class="icon">📋</span>List
+                        </button>
+                        <button class="toolbar-btn" id="insertLinkBtn" title="Insert Link">
+                            <span class="icon">🔗</span>Link
+                        </button>
+                    </div>
+                    <div class="toolbar-group">
+                        <button class="toolbar-btn" id="togglePreviewBtn" title="Toggle Preview">
+                            <span class="icon">👁️</span>Preview
+                        </button>
+                        <button class="toolbar-btn" id="expandTextareaBtn" title="Expand/Collapse">
+                            <span class="icon">⛶</span>Expand
+                        </button>
+                    </div>
+                </div>
+                <div class="prompt-builder-content">
+                    <textarea id="promptBuilderTextarea" rows="10" placeholder="Tree/leaf prompts will appear here when you use tree actions with 'Copy to Prompt Builder' mode enabled...
+
+Tips for better prompts:
+• Use clear headings with # 
+• Structure with bullet points
+• Include code blocks with ```
+• Add context and examples"></textarea>
+                    <div id="promptPreview" class="prompt-preview hidden"></div>
+                </div>
+                <div class="prompt-builder-actions">
+                    <div class="character-count">
+                        <span id="characterCount">0</span> characters
+                    </div>
                     <button class="btn" id="autoPromptFromBuilderBtn">
                         <span class="icon">🚀</span>Auto-Prompt from Builder
                     </button>
@@ -82,6 +131,8 @@
     
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <script src="main.js"></script>
 </body>
 </html> 
