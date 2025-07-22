@@ -2,7 +2,7 @@
   "name": "devtreeflow",
   "displayName": "DevTreeFlow",
   "description": "AI context management system for structured development workflows",
-  "version": "1.0.4",
+  "version": "1.7.0",
   "icon": "media/Devtreeflow.PNG",
   "engines": {
     "vscode": "^1.74.0"
@@ -133,6 +133,11 @@
       {
         "command": "devtreeflow.clearCurrentChat",
         "title": "DevTreeFlow: Clear Current Chat (Focus, Select All, Backspace)",
+        "category": "DevTreeFlow"
+      },
+      {
+        "command": "devtreeflow.validatePrompts",
+        "title": "DevTreeFlow: Validate All Prompts",
         "category": "DevTreeFlow"
       }
     ],

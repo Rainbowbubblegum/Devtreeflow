@@ -1,109 +1,212 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as vscode from 'vscode';
+import { WorkflowManager } from './workflow-manager';
 
 export class EnhancedPromptGenerator {
     
+    public static generateGenesisPrompt(mainGoal: string): string {
+        return `# DevTreeFlow Task Breakdown System - Complete AI Instructions
+
+You are the DevTreeFlow AI, an expert in breaking down complex software development goals into a fine-grained, **deeply nested, hierarchical task structure**. Your primary function is to create a comprehensive, multi-level plan that can be executed by a team of AI agents.
+
+## MAIN GOAL: ${mainGoal}
+
+## 🚨 CRITICAL REQUIREMENTS 🚨
+1.  **DEEPLY NESTED HIERARCHY**: You MUST break down the main goal into multiple levels of tasks (e.g., Key Tasks -> Tasks -> Sub-Tasks -> Sub-Sub-Tasks). A flat list of tasks is a failure. The more complex the goal, the deeper the hierarchy should be.
+2.  **RECURSIVE FILE CREATION**: For **EVERY** task, sub-task, and sub-sub-task you identify, you MUST create the corresponding folder and its required files (\`/InstructionsFromParent/briefing.md\` and \`/MeAndMyChildren/00_intro.md\`).
+3.  **FILESYSTEM-SAFE NAMES**: All folder names must be filesystem-safe (e.g., 'setup-database', 'implement-user-login'). Use kebab-case.
+
+## COMPLETE EXECUTION SEQUENCE:
+
+### Step 1: Analyze and Break Down the Goal
+Based on the main goal "${mainGoal}", you must create a detailed, multi-level breakdown.
+
+**Example of a GOOD, NESTED breakdown structure:**
+\`\`\`json
+[
+  {
+    "name": "Setup-Authentication-Service",
+    "description": "Implement the complete user authentication and authorization system.",
+    "subtasks": [
+      {
+        "name": "Create-Login-Endpoint",
+        "description": "Design and implement the API endpoint for user login.",
+        "subtasks": [
+          {
+            "name": "Add-Request-Validation",
+            "description": "Implement validation for login request body."
+          },
+          {
+            "name": "Implement-Password-Hashing",
+            "description": "Implement secure password hashing and comparison."
+          }
+        ]
+      },
+      {
+        "name": "Setup-JWT-Tokens",
+        "description": "Implement JWT for session management.",
+        "subtasks": [
+          {
+            "name": "Generate-JWT-Token",
+            "description": "Create a function to generate JWTs upon successful login."
+          },
+          {
+            "name": "Validate-JWT-Token",
+            "description": "Create middleware to validate JWTs on protected routes."
+          }
+        ]
+      }
+    ]
+  }
+]
+\`\`\`
+
+### Step 2: Create Directory & File Structure (Recursive)
+For **EACH AND EVERY NODE** in your breakdown (e.g., "Setup-Authentication-Service", "Create-Login-Endpoint", "Add-Request-Validation"), you must perform the following steps recursively:
+
+**A) Create the Nested Folder Structure:**
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[FULL-NESTED-PATH-TO-TASK]"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating the nested folder for the task [TASK-NAME] at [FULL-NESTED-PATH-TO-TASK]</parameter>
+</invoke>
+</function_calls>
+
+**B) Create Required Subfolders:**
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[FULL-NESTED-PATH-TO-TASK]/InstructionsFromParent"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating InstructionsFromParent folder for [TASK-NAME]</parameter>
+</invoke>
+</function_calls>
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[FULL-NESTED-PATH-TO-TASK]/MeAndMyChildren"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating MeAndMyChildren folder for [TASK-NAME]</parameter>
+</invoke>
+</function_calls>
+
+**C) Create \`briefing.md\` File:**
+<function_calls>
+<invoke name="edit_file">
+<parameter name="target_file">DevTreeFlow/[FULL-NESTED-PATH-TO-TASK]/InstructionsFromParent/briefing.md</parameter>
+<parameter name="instructions">Creating briefing file with task description, parent context, and success criteria.</parameter>
+<parameter name="code_edit"># Task Briefing: [TASK-NAME]
+
+## Parent: [PARENT-NAME]
+## Main Goal: ${mainGoal}
+
+## Task Description
+[Provide a detailed description of what THIS SPECIFIC task accomplishes]
+
+## Success Criteria
+- [Specific measurable outcome 1 for this task]
+- [Specific measurable outcome 2 for this task]
+
+## Dependencies
+- [List any dependencies on other tasks]
+</parameter>
+</invoke>
+</function_calls>
+
+**D) Create \`00_intro.md\` Progress File:**
+<function_calls>
+<invoke name="edit_file">
+<parameter name="target_file">DevTreeFlow/[FULL-NESTED-PATH-TO-TASK]/MeAndMyChildren/00_intro.md</parameter>
+<parameter name="instructions">Creating progress tracking file for task status and updates.</parameter>
+<parameter name="code_edit"># Task Progress: [TASK-NAME]
+
+## Status: Pending
+## Parent: [PARENT-NAME]
+## Created: [CURRENT-DATE]
+
+## Overview
+[Brief overview of this task's purpose and scope.]
+
+## My Responsibilities
+1. [Specific responsibility 1 for this task]
+2. [Specific responsibility 2 for this task]
+
+## Sub-tasks
+- [ ] [Sub-task 1 name (if any)]
+- [ ] [Sub-task 2 name (if any)]
+
+## Progress Log
+- [CURRENT-DATE]: Task created and initialized.
+</parameter>
+</invoke>
+</function_calls>
+
+### Step 3: Output Final Structure
+After creating all folders and files, provide a summary of the created hierarchy.
+
+START EXECUTION NOW. Be methodical and thorough. A deeply nested, well-structured tree is the primary measure of success.`;
+    }
+
+    public static generateBriefingPrompt(taskName: string, parentName: string, mainGoal: string): string {
+        const templatePath = path.join(__dirname, '..', 'templates', 'briefing-template.md');
+        try {
+            const template = fs.readFileSync(templatePath, 'utf8');
+            return template
+                .replace(/{{TASK_NAME}}/g, taskName)
+                .replace(/{{PARENT_NAME}}/g, parentName)
+                .replace(/{{MAIN_GOAL}}/g, mainGoal);
+        } catch (error) {
+            console.error('Error reading briefing template:', error);
+            return `Error: Could not generate briefing for task "${taskName}".`;
+        }
+    }
+
+
+
     /**
      * Generates a comprehensive AI identity prompt for a specific leaf
      */
-    public static generateIdentityPrompt(leafPath: string, developerRequest: string = ''): string {
+    public static generateIdentityPrompt(leafPath: string, extraContext: string = ''): string {
         const leafName = path.basename(leafPath);
         const parentPath = path.dirname(leafPath);
         const parentName = path.basename(parentPath) !== 'DevTreeFlow' ? path.basename(parentPath) : 'Root';
         
-        // Determine current mode based on context
-        const mode = this.determineCurrentMode(leafPath);
-        
-        const prompt = `# AI Identity Prompt Template
+        const prompt = `# DevTreeFlow Agent Activation
 
-## Core Identity Setup
+## Your Identity
+You are now the AI agent for: **${leafName}**
+Parent: **${parentName}**
+Path: \`/DevTreeFlow/${leafPath}\`
 
-You are an AI agent operating within the DevTreeFlow hierarchical task management system. Before proceeding with any task, you MUST:
+## MANDATORY First Actions
+1. **Read Your Briefing**: Check \`/DevTreeFlow/${leafPath}/InstructionsFromParent/briefing.md\`
+2. **Check Your Progress**: Read \`/DevTreeFlow/${leafPath}/MeAndMyChildren/00_intro.md\`
+3. **Understand Context**: Review any other files in your folders
 
-1. **Read the system identity guide**: \`/DevTreeFlow/system-identity.md\`
-2. **Determine your current mode** based on the context
-3. **Read all relevant context documents** in your current leaf
-4. **Establish your identity** within the tree structure
+## Your Working Protocol
+1. **Always start** by reading your briefing and current progress
+2. **Update progress** in your \`00_intro.md\` file after any significant work
+3. **Create sub-tasks** if your task is too complex for a single implementation
+4. **Report completion** by updating your status to "Completed" in your progress file
 
 ## Current Context
-
-**Leaf Name**: ${leafName}
-**Parent**: ${parentName}
-**Current Mode**: ${mode}
-**Leaf Path**: \`/DevTreeFlow/${leafPath}\`
-
-## Required Actions
-
-### 1. Identity Establishment
-- Read \`/DevTreeFlow/system-identity.md\` to understand your role
-- Identify your position in the tree hierarchy
-- Determine your current operational mode
-- Establish your responsibilities and constraints
-
-### 2. Context Reading
-Read these context documents in order:
-1. \`/DevTreeFlow/${leafPath}/leaf-identity.md\` (if exists)
-2. \`/DevTreeFlow/${leafPath}/task-checklist.md\` (if exists)
-3. \`/DevTreeFlow/${leafPath}/parent-notes.md\` (if exists)
-4. \`/DevTreeFlow/${leafPath}/architectural-context.md\` (if exists)
-5. \`/DevTreeFlow/${leafPath}/MeAndMyChildren/progress-updates.md\` (if exists)
-
-### 3. Mode-Specific Behavior
-
-${this.getModeSpecificInstructions(mode, leafPath)}
-
-### 4. Communication Protocol
-- Always inform when switching modes
-- Provide clear status summaries
-- Request new chat sessions for major transitions
-- Document all significant decisions
-- Update context documents after any significant action
-
-### 5. Architectural Awareness
-- All code must work within the larger system
-- Maintain integration points with parent and children
-- Follow established patterns and conventions
-- Consider system-wide implications of changes
-
-## Developer Request
-
-The developer has requested: ${developerRequest || 'No specific request provided - operating in standard mode'}
+${extraContext || 'Standard task execution mode - proceed with your assigned task.'}
 
 ## Response Format
-
-Begin your response with:
-
+Start your response with:
 \`\`\`
-# DevTreeFlow AI Agent Response
+Agent: ${leafName}
+Status: [Check your 00_intro.md and report current status]
+Parent: ${parentName}
 
-**Leaf**: ${leafName}
-**Mode**: ${mode}
-**Status**: [CURRENT_STATUS]
+Progress Summary:
+[Summarize what you find in your progress file]
 
-## Context Analysis
-[Summary of what you read from context documents]
-
-## Mode-Specific Actions
-[What you're doing based on your current mode]
-
-## Developer Request Processing
-[How you're handling the developer's request]
-
-## Next Steps
-[What you plan to do next]
+Next Actions:
+[Based on your briefing and current progress, what will you do?]
 \`\`\`
 
-## Important Notes
-
-- **Always read context first** before responding
-- **Maintain hierarchical awareness** - you may be both parent and child
-- **Document everything** in appropriate context files
-- **Communicate with parent** through structured updates
-- **Request new chat sessions** for major context switches
-- **Be cost-efficient** - use structured formats and avoid redundancy
-- **Handle errors gracefully** - inform developer of major issues immediately
-
-Remember: You are part of a larger system. Your actions affect the entire tree structure. Always consider the architectural implications of your decisions.`;
+Remember: You are part of a larger system. Your work contributes to the overall goal. Always maintain awareness of your parent's expectations and your children's progress (if any).`;
 
         return prompt;
     }

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevTreeFlow Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-header">
+        <h1>🌳 DevTreeFlow Dashboard</h1>
+        <button class="refresh-btn-top" id="refreshBtnTop">
+            <img src="" class="devtreeflow-logo" alt="logo" />Refresh
+        </button>
+    </div>
+    <div class="section">
+        <div class="section-header">Modes</div>
+        <div class="modes-row">
+            <button class="btn" id="autoPromptToggle">
+                <span class="icon">🤖</span><span id="autoPromptText">Enable Auto-Prompting</span>
+            </button>
+            <label><input type="checkbox" id="copyToPromptBuilderToggle"> Copy to Prompt Builder before prompting</label>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-header">Chat Controls</div>
+        <div class="chat-controls-row">
+            <button class="btn secondary" id="newChatBtn">
+                <span class="icon">💬</span>New Chat
+            </button>
+            <button class="btn secondary" id="newChatTabBtn">
+                <span class="icon">💡</span>Open New Chat Tab
+            </button>
+            <button class="btn secondary" id="clearChatBtn">
+                <span class="icon">🧹</span>Clear Chat
+            </button>
+        </div>
+    </div>
+    <div class="section">
+        <div class="section-header">Tree Controls</div>
+        <div class="tree-controls-row">
+            <button class="btn" id="newTaskTreeBtn">
+                <span class="icon">🌳</span>New Task Tree
+            </button>
+            <button class="btn" id="createTreeFromAIResponseBtn">
+                <span class="icon">🤖</span>Create Tree from AI Response
+            </button>
+            <button class="btn secondary" id="testButton" style="margin-left: 10px;">
+                <span class="icon">🧪</span>Test Button
+            </button>
+        </div>
+    </div>
+    <div class="section">
+        <div class="tree-and-context-row">
+            <div id="treeContainer">
+                <div class="empty-state">
+                    <h2>No DevTreeFlow Structure Found</h2>
+                    <p>Initialize DevTreeFlow to start managing your AI development workflows.</p>
+                    <button class="btn" id="initializeDevTreeFlowBtn">
+                        <span class="icon">🚀</span>Initialize DevTreeFlow
+                    </button>
+                </div>
+            </div>
+            <div id="contextFilesContainer">
+                <h3>📄 Project Specific Context Files</h3>
+                <div class="context-files-list">
+                    <p style="color: var(--vscode-descriptionForeground);">Loading context files...</p>
+                </div>
+            </div>
+            <div id="promptBuilderContainer">
+                <h3>🛠️ Prompt Builder</h3>
+                <textarea id="promptBuilderTextarea" rows="10" placeholder="Tree/leaf prompts will appear here when you use tree actions with 'Copy to Prompt Builder' mode enabled..."></textarea>
+                <div>
+                    <button class="btn" id="autoPromptFromBuilderBtn">
+                        <span class="icon">🚀</span>Auto-Prompt from Builder
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html> 

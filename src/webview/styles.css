@@ -1,0 +1,542 @@
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    margin: 0;
+    padding: 0;
+}
+.dashboard-header {
+    width: 100%;
+    background: var(--vscode-panel-background);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    padding: 18px 24px 12px 24px;
+    box-sizing: border-box;
+    position: relative;
+}
+.dashboard-header h1 {
+    margin: 0;
+    color: var(--vscode-titleBar-activeForeground);
+    font-size: 2em;
+}
+.refresh-btn-top {
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.refresh-btn-top:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+.section {
+    margin: 24px 24px 0 24px;
+    padding: 18px;
+    background: var(--vscode-panel-background);
+    border-radius: 8px;
+    border: 1px solid var(--vscode-panel-border);
+    clear: both;
+    width: calc(100% - 48px);
+    box-sizing: border-box;
+}
+.section-header {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 12px;
+    color: var(--vscode-titleBar-activeForeground);
+}
+.modes-row, .chat-controls-row, .tree-controls-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.modes-row label, .chat-controls-row button, .tree-controls-row button {
+    margin-right: 8px;
+}
+.tree-and-context-row {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: stretch;
+    width: 100%;
+}
+
+/* Only use horizontal layout on very wide screens */
+@media (min-width: 1400px) {
+    .tree-and-context-row {
+        flex-direction: row;
+        gap: 32px;
+        align-items: flex-start;
+    }
+    
+    #treeContainer {
+        flex: 2;
+        min-width: 350px;
+        max-width: 50%;
+    }
+    
+    #contextFilesContainer {
+        flex: 1;
+        min-width: 220px;
+        max-width: 25%;
+    }
+    
+    #promptBuilderContainer {
+        flex: 2;
+        min-width: 350px;
+        max-width: 50%;
+    }
+}
+
+#treeContainer {
+    width: 100%;
+    margin-bottom: 24px;
+    min-height: 200px;
+}
+
+#contextFilesContainer {
+    width: 100%;
+    margin-bottom: 24px;
+    margin-top: 0;
+    min-height: 200px;
+}
+
+#promptBuilderContainer {
+    width: 100%;
+    margin-top: 0;
+    min-height: 200px;
+}
+.context-files-list label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+.context-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.context-file-row label {
+    flex: 1;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.context-file-open-btn {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: none;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.context-file-open-btn:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+.context-folder-tree {
+    font-size: 13px;
+    line-height: 22px;
+}
+.context-folder-item {
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+    cursor: pointer;
+    user-select: none;
+}
+.context-folder-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+.context-folder-icon {
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+.context-folder-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.context-folder-actions {
+    display: none;
+    gap: 4px;
+    margin-left: 8px;
+}
+.context-folder-item:hover .context-folder-actions {
+    display: flex;
+}
+.context-folder-children {
+    margin-left: 20px;
+}
+.context-folder-children.collapsed {
+    display: none;
+}
+.context-folder-toggle {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    opacity: 0.7;
+    margin-right: 4px;
+    transition: transform 0.2s ease;
+}
+.context-folder-toggle:hover {
+    opacity: 1;
+}
+.context-folder-toggle.expanded {
+    transform: rotate(90deg);
+}
+.context-folder-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+.context-folder-header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+.context-add-btn {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 16px;
+    opacity: 0.7;
+}
+.context-add-btn:hover {
+    opacity: 1;
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+.context-file-checkbox {
+    margin-right: 6px;
+}
+.context-header-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+textarea {
+    width: 100%;
+    min-height: 120px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 13px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    padding: 8px;
+    box-sizing: border-box;
+}
+.btn {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.btn:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+.btn.secondary {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+.btn.secondary:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+.btn.enabled {
+    background-color: var(--vscode-terminal-ansiGreen);
+    color: var(--vscode-button-foreground);
+}
+.btn.enabled:hover {
+    background-color: var(--vscode-terminal-ansiBrightGreen);
+}
+
+/* Tree node styles */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--vscode-descriptionForeground);
+}
+.empty-state h2 {
+    margin-bottom: 10px;
+    color: var(--vscode-titleBar-activeForeground);
+}
+.tree-node {
+    margin: 10px 0;
+    padding: 12px;
+    background-color: var(--vscode-list-inactiveSelectionBackground);
+    border-radius: 6px;
+    border-left: 4px solid var(--vscode-textLink-foreground);
+    clear: both;
+    overflow: hidden;
+}
+.tree-node.not-started {
+    border-left-color: var(--vscode-editorWarning-foreground);
+}
+.tree-node.in-progress {
+    border-left-color: var(--vscode-editorInfo-foreground);
+}
+.tree-node.completed {
+    border-left-color: var(--vscode-terminal-ansiGreen);
+}
+.mermaid {
+    /* Style your mermaid diagram here */
+    margin-bottom: 20px;
+}
+/* Enlarge Mermaid diagrams */
+.mermaid svg {
+    transform: scale(1.4);
+    transform-origin: top left;
+}
+#mermaidContainer {
+    overflow: auto;
+}
+.node-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.node-name {
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--vscode-editor-foreground);
+}
+.node-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background-color: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+}
+.node-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.node-actions .btn {
+    padding: 4px 12px;
+    font-size: 11px;
+}
+.node-children {
+    margin-left: 20px;
+    margin-top: 10px;
+    border-left: 2px solid var(--vscode-panel-border);
+    padding-left: 15px;
+}
+.node-path {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 8px;
+}
+.icon {
+    margin-right: 5px;
+}
+
+/* Remove the old problematic media query */
+@media (max-width: 1399px) {
+    .tree-and-context-row {
+        flex-direction: column;
+    }
+    
+    #promptBuilderContainer, #contextFilesContainer, #treeContainer {
+        min-width: 0;
+        width: 100%;
+        flex: none;
+    }
+}
+.devtreeflow-logo {
+    height: 18px;
+    width: 18px;
+    vertical-align: middle;
+    margin-right: 4px;
+} 
+
+/* Tree header and view toggles */
+.tree-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.tree-view-toggles {
+    display: flex;
+    gap: 8px;
+}
+
+.tree-view-toggles .btn {
+    padding: 6px 12px;
+    font-size: 11px;
+}
+
+/* Diagram specific styles */
+#diagramTreeView {
+    width: 100%;
+    min-height: 400px;
+}
+
+.diagram-controls {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+    background-color: #2c2c2c;
+    border-bottom: 1px solid #444;
+}
+
+.diagram-controls .btn {
+    margin: 0 5px;
+}
+
+.diagram-instance {
+    border: 1px solid #444;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #252526;
+}
+
+.diagram-instance h4 {
+    text-align: center;
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #444;
+}
+
+#mermaidContainer {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.mermaid {
+    /* Style your mermaid diagram here */
+    margin-bottom: 20px;
+    width: 100%;
+    min-height: 300px;
+}
+
+/* Enlarge Mermaid diagrams */
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Diagram action menu styles */
+.diagram-action-menu {
+    background: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 4px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 1000;
+}
+
+.diagram-action-btn {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--vscode-menu-foreground);
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 2px;
+    margin-bottom: 2px;
+    font-size: 12px;
+}
+
+.diagram-action-btn:hover {
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+.diagram-action-btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Mermaid node styling enhancements */
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node polygon {
+    stroke-width: 2px;
+    cursor: pointer;
+}
+
+.mermaid .node:hover rect,
+.mermaid .node:hover circle,
+.mermaid .node:hover polygon {
+    stroke-width: 3px;
+    filter: brightness(1.1);
+}
+
+/* Responsive diagram container */
+@media (max-width: 768px) {
+    .tree-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+    
+    .tree-view-toggles {
+        justify-content: center;
+    }
+    
+    #mermaidContainer {
+        padding: 8px;
+        overflow-x: auto;
+    }
+    
+    .mermaid svg {
+        transform: scale(0.8);
+        transform-origin: top left;
+    }
+} 
+
+.section:last-child {
+    margin-bottom: 24px;
+}
+
+.section .tree-and-context-row {
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Ensure tree containers don't overflow their parent */
+#treeContainer,
+#contextFilesContainer, 
+#promptBuilderContainer {
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+} 
+
+.tree-node .node-children {
+    padding-left: 20px;
+    border-left: 1px solid #444;
+    margin-left: 10px;
+}
+
+.tree-node .node-header { 

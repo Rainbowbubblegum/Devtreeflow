@@ -4,12 +4,16 @@ import * as fs from 'fs';
 import { DevTreeFlowDashboard } from './dashboard';
 import { AutoPromptService } from './auto-prompt-service';
 import { CursorCommandTester } from './cursor-command-tester';
+import { PromptValidator } from './prompt-validator';
+import { ActionManager } from './action-manager';
+import { TreeNode } from './tree-node';
 
 export function activate(context: vscode.ExtensionContext) {
     const provider = new DevTreeFlowProvider(context);
     vscode.window.registerTreeDataProvider('devTreeFlowExplorer', provider);
     
     const dashboard = new DevTreeFlowDashboard(context);
+    context.subscriptions.push(dashboard);
 
     const refreshCommand = vscode.commands.registerCommand('devtreeflow.refreshTree', () => {
         provider.refresh();
@@ -20,23 +24,29 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const switchToNodeCommand = vscode.commands.registerCommand('devtreeflow.switchToNode', (item: TreeNode) => {
-        handleSwitchToNode(item);
+        ActionManager.switchToNode(item.relativePath);
     });
 
     const switchAndFollowParentCommand = vscode.commands.registerCommand('devtreeflow.switchAndFollowParent', (item: TreeNode) => {
-        handleSwitchAndFollowParent(item);
+        ActionManager.switchAndFollowParent(item.relativePath);
     });
 
     const assessChildrenCommand = vscode.commands.registerCommand('devtreeflow.assessChildren', (item: TreeNode) => {
-        handleAssessChildren(item);
+        ActionManager.assessChildren(item.relativePath);
     });
 
     const summarizeStatusCommand = vscode.commands.registerCommand('devtreeflow.summarizeStatus', (item: TreeNode) => {
-        handleSummarizeStatus(item);
+        ActionManager.summarizeStatus(item.relativePath);
     });
 
     const createDevTreeFlowCommand = vscode.commands.registerCommand('devtreeflow.createDevTreeFlow', async () => {
         await handleCreateDevTreeFlow();
+    });
+
+    const createTreeFromAIResponseCommand = vscode.commands.registerCommand('devtreeflow.createTreeFromAIResponse', async () => {
+        if (dashboard['handleCreateTreeFromAIResponse']) {
+            (dashboard as any).handleCreateTreeFromAIResponse();
+        }
     });
 
     const showDashboardCommand = vscode.commands.registerCommand('devtreeflow.showDashboard', () => {
@@ -127,6 +137,12 @@ export function activate(context: vscode.ExtensionContext) {
         await AutoPromptService.clearCurrentChatWithFeedback();
     });
 
+    // Add Validate Prompts command
+    const validatePromptsCommand = vscode.commands.registerCommand('devtreeflow.validatePrompts', async () => {
+        await PromptValidator.validateAllPrompts();
+        vscode.window.showInformationMessage('Prompt validation complete. Check the output panel for results.');
+    });
+
     context.subscriptions.push(
         refreshCommand,
         newTaskTreeCommand,
@@ -135,6 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
         assessChildrenCommand,
         summarizeStatusCommand,
         createDevTreeFlowCommand,
+        createTreeFromAIResponseCommand,
         showDashboardCommand,
         autoPromptCurrentLeafCommand,
         autoPromptWithContextCommand,
@@ -149,7 +166,8 @@ export function activate(context: vscode.ExtensionContext) {
         testAutomationFlowCommand,
         listAvailableCommandsCommand,
         testKeyboardSimulationCommand,
-        clearCurrentChatCommand
+        clearCurrentChatCommand,
+        validatePromptsCommand
     );
 
     checkForDevTreeFlowFolder();
@@ -222,18 +240,6 @@ class DevTreeFlowProvider implements vscode.TreeDataProvider<TreeNode> {
         } catch {
             return false;
         }
-    }
-}
-
-class TreeNode extends vscode.TreeItem {
-    constructor(
-        public readonly label: string,
-        public readonly relativePath: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState
-    ) {
-        super(label, collapsibleState);
-        this.contextValue = 'treeNode';
-        this.tooltip = `${this.label} - ${this.relativePath}`;
     }
 }
 
@@ -445,83 +451,21 @@ Begin by analyzing the task "${taskName}" and creating the necessary child nodes
 }
 
 async function handleSwitchToNode(item: TreeNode) {
-    const workspaceFolder = getWorkspaceFolder();
-    if (!workspaceFolder) {
-        return;
-    }
-
-    const prompt = `You are an AI agent assigned to the '${item.label}' task in the DevTreeFlow system.
-
-Read all context files inside:
-- /DevTreeFlow/${item.relativePath}/InstructionsFromParent/
-- /DevTreeFlow/${item.relativePath}/MeAndMyChildren/
-
-Follow the context system described in tree-start.md and begin executing your role for the "${item.label}" task.`;
-
-    await vscode.env.clipboard.writeText(prompt);
-    vscode.window.showInformationMessage(`Switched to '${item.label}' - prompt copied to clipboard!`);
+    await ActionManager.switchToNode(item.relativePath);
 }
 
 async function handleSwitchAndFollowParent(item: TreeNode) {
-    const workspaceFolder = getWorkspaceFolder();
-    if (!workspaceFolder) {
-        return;
-    }
-
-    const pathParts = item.relativePath.split(path.sep);
-    const parentPath = pathParts.length > 1 ? pathParts.slice(0, -1).join('/') : 'root';
-    const parentName = pathParts.length > 1 ? pathParts[pathParts.length - 2] : 'root';
-
-    const prompt = `You are the AI agent assigned to '${item.label}', a subtask of '${parentName}' in the DevTreeFlow system.
-
-You must:
-- Read your context from: /DevTreeFlow/${item.relativePath}/InstructionsFromParent/
-- Read your task details from: /DevTreeFlow/${item.relativePath}/MeAndMyChildren/
-- Pay special attention to any instructions left by your parent node '${parentName}'
-
-Your role is to carry out the "${item.label}" task as per the parent's expectations and update your folder with progress notes as needed.
-
-Begin by reading all context files and following your parent's instructions.`;
-
-    await vscode.env.clipboard.writeText(prompt);
-    vscode.window.showInformationMessage(`Switch to '${item.label}' with parent context - prompt copied to clipboard!`);
+    await ActionManager.switchAndFollowParent(item.relativePath);
 }
 
 async function handleAssessChildren(item: TreeNode) {
-    const prompt = `You are the AI agent for '${item.label}' in the DevTreeFlow system.
-
-Your task is to assess the status and progress of all your child nodes/tasks.
-
-Please:
-1. Read your context from: /DevTreeFlow/${item.relativePath}/MeAndMyChildren/
-2. Check each child folder under /DevTreeFlow/${item.relativePath}/
-3. Review progress in each child's MeAndMyChildren folder
-4. Identify any blockers, completed tasks, or areas needing attention
-5. Provide a summary of child task statuses
-6. Update coordination plans if needed
-
-Focus on: task completion status, quality of work, next steps, and any needed interventions.`;
-
-    await vscode.env.clipboard.writeText(prompt);
-    vscode.window.showInformationMessage(`Assess children of '${item.label}' - prompt copied to clipboard!`);
+    await ActionManager.assessChildren(item.relativePath);
 }
 
 async function handleSummarizeStatus(item: TreeNode) {
-    const prompt = `You are the AI agent for '${item.label}' in the DevTreeFlow system.
-
-Please provide a comprehensive status summary for this task:
-
-1. Read all context from: /DevTreeFlow/${item.relativePath}/
-2. Review task objectives and current progress
-3. Summarize what has been completed
-4. Identify what remains to be done
-5. Note any blockers or issues
-6. Assess overall task health and timeline
-
-Provide a clear, structured status report that can be shared with parent nodes or team members.`;
-
-    await vscode.env.clipboard.writeText(prompt);
-    vscode.window.showInformationMessage(`Summarize status of '${item.label}' - prompt copied to clipboard!`);
+    await ActionManager.summarizeStatus(item.relativePath);
 }
 
-export function deactivate() {}
+export function deactivate() {
+    console.log('DevTreeFlow: Extension deactivating...');
+}

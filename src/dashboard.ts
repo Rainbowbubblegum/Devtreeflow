@@ -6,10 +6,15 @@ import { WorkflowManager } from './workflow-manager';
 import { ContextDocumentManager } from './context-document-manager';
 import { AutoPromptService } from './auto-prompt-service';
 import { readdirSync, readFileSync } from 'fs';
+import { handleMessage } from './dashboard-handlers';
+import { getTreeData, getNodeChildren } from './tree-management';
+import { loadContextFolderStructure, updatePromptBuilderWithContextFiles } from './context-manager';
+import { getAIResponse, parseTaskBreakdown, createTreeFromBreakdown } from './prompt-utils';
 
-export class DevTreeFlowDashboard {
+export class DevTreeFlowDashboard implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private context: vscode.ExtensionContext;
+    private disposables: vscode.Disposable[] = [];
 
     // [2] Add new state for context file ticks and prompt builder
     private contextFileTicks: { [filepath: string]: boolean } = {};
@@ -17,6 +22,9 @@ export class DevTreeFlowDashboard {
     private copyToPromptBuilderMode: boolean = false;
     private contextFilesList: string[] = [];
     private contextFolderStructure: any = null;
+
+    public getTreeData = () => getTreeData(this);
+    public getNodeChildren = (nodePath: string) => getNodeChildren(this, nodePath);
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -32,6 +40,16 @@ export class DevTreeFlowDashboard {
                 return;
             }
 
+            // Check if DevTreeFlow folder exists
+            const workspaceFolder = this.getWorkspaceFolder();
+            if (workspaceFolder) {
+                const devTreeFlowPath = path.join(workspaceFolder, 'DevTreeFlow');
+                if (!fs.existsSync(devTreeFlowPath)) {
+                    console.log('DevTreeFlow: Creating DevTreeFlow folder...');
+                    fs.mkdirSync(devTreeFlowPath, { recursive: true });
+                }
+            }
+
             console.log('DevTreeFlow: Creating new WebView panel...');
             this.panel = vscode.window.createWebviewPanel(
                 'devTreeFlowDashboard',
@@ -41,6 +59,7 @@ export class DevTreeFlowDashboard {
                     enableScripts: true,
                     retainContextWhenHidden: true,
                     localResourceRoots: [
+                        vscode.Uri.file(path.join(this.context.extensionPath, 'src', 'webview')),
                         vscode.Uri.file(path.join(this.context.extensionPath, 'media'))
                     ]
                 }
@@ -51,111 +70,80 @@ export class DevTreeFlowDashboard {
 
             console.log('DevTreeFlow: Setting WebView content...');
             // Load context folder structure
-            this.loadContextFolderStructure();
-            this.panel.webview.html = this.getWebviewContent(logoUri);
+            loadContextFolderStructure(this);
+            this.panel.webview.html = this.getWebviewContent();
 
-            this.panel.webview.onDidReceiveMessage(
+            // Properly handle disposables to prevent listener leaks
+            const messageDisposable = this.panel.webview.onDidReceiveMessage(
                 async (message) => {
-                    await this.handleMessage(message);
+                    await handleMessage(message, this);
                 },
                 undefined,
                 this.context.subscriptions
             );
+            this.disposables.push(messageDisposable);
 
-            this.panel.onDidDispose(() => {
+            const panelDisposable = this.panel.onDidDispose(() => {
                 console.log('DevTreeFlow: Panel disposed');
                 this.panel = undefined;
+                this.dispose();
             });
+            this.disposables.push(panelDisposable);
 
-            console.log('DevTreeFlow: Refreshing tree data...');
-            this.refreshTreeData();
-            
-            // Send initial state including context files
-            this.updateWebviewState();
-            
             console.log('DevTreeFlow: Dashboard created successfully');
-        } catch (error) {
+        } catch (error: any) {
             console.error('DevTreeFlow: Error in dashboard show():', error);
-            vscode.window.showErrorMessage(`Failed to create dashboard: ${error}`);
+            vscode.window.showErrorMessage(`Failed to create dashboard: ${error.message}`);
         }
     }
 
-    private async handleMessage(message: any) {
-        switch (message.command) {
-            case 'switchToNode':
-                await this.handleSwitchToNode(message.nodePath);
-                break;
-            case 'switchAndFollowParent':
-                await this.handleSwitchAndFollowParent(message.nodePath);
-                break;
-            case 'assessChildren':
-                await this.handleAssessChildren(message.nodePath);
-                break;
-            case 'summarizeStatus':
-                await this.handleSummarizeStatus(message.nodePath);
-                break;
-            case 'newTaskTree':
-                await this.handleNewTaskTree();
-                break;
-            case 'refreshTree':
-                this.refreshTreeData();
-                break;
-            case 'initializeDevTreeFlow':
-                await this.handleInitializeDevTreeFlow();
-                break;
-            case 'initializeLeaf':
-                await this.handleInitializeLeaf(message.leafPath);
-                break;
-            case 'workflowMode':
-                await this.handleWorkflowMode(message.leafPath, message.mode);
-                break;
-            case 'toggleAutoPromptingMode':
-                await this.handleToggleAutoPromptingMode();
-                break;
-            case 'openNewCursorChat':
-                await this.handleOpenNewCursorChat();
-                break;
-            case 'openNewCursorChatTab':
-                await this.handleOpenNewCursorChatTab();
-                break;
-            case 'openExtensionsPanel':
-                await vscode.commands.executeCommand('devtreeflow.openExtensionsPanel');
-                break;
-            case 'clearCurrentChat':
-                await vscode.commands.executeCommand('devtreeflow.clearCurrentChat');
-                break;
-            case 'toggleCopyToPromptBuilderMode':
-                this.copyToPromptBuilderMode = !this.copyToPromptBuilderMode;
-                this.updateWebviewState();
-                break;
-            case 'toggleContextFileTick':
-                this.contextFileTicks[message.filename] = !this.contextFileTicks[message.filename];
-                this.updatePromptBuilderWithContextFiles();
-                this.updateWebviewState();
-                break;
-            case 'updatePromptBuilder':
-                this.promptBuilderContent = message.content;
-                break;
-            case 'autoPromptFromBuilder':
-                await this.handleAutoPromptFromBuilder();
-                break;
-            case 'treeActionPrompt':
-                await this.handleTreeActionPrompt(message.prompt);
-                break;
-            case 'openContextFile':
-                await this.handleOpenContextFile(message.filename);
-                break;
-            case 'createContextFolder':
-                await this.handleCreateContextFolder(message.folderPath);
-                break;
-            case 'createContextDocument':
-                await this.handleCreateContextDocument(message.folderPath, message.fileName);
-                break;
-            case 'refreshContextFiles':
-                this.loadContextFolderStructure();
-                this.updateWebviewState();
-                break;
+    public dispose() {
+        this.disposables.forEach(d => d.dispose());
+        this.disposables = [];
+    }
+
+    private getWebviewContent(): string {
+        if (!this.panel) {
+            console.log('DevTreeFlow: getWebviewContent - No panel found');
+            return '';
         }
+        const webviewPath = path.join(this.context.extensionPath, 'src', 'webview');
+        const htmlPath = path.join(webviewPath, 'index.html');
+        
+        console.log('DevTreeFlow: Extension path:', this.context.extensionPath);
+        console.log('DevTreeFlow: Webview path:', webviewPath);
+        console.log('DevTreeFlow: HTML path:', htmlPath);
+        console.log('DevTreeFlow: HTML file exists:', fs.existsSync(htmlPath));
+        
+        if (!fs.existsSync(htmlPath)) {
+            console.error('DevTreeFlow: HTML file not found at:', htmlPath);
+            return '<html><body><h1>Error: HTML file not found</h1></body></html>';
+        }
+        
+        let html = fs.readFileSync(htmlPath, 'utf8');
+        console.log('DevTreeFlow: HTML content length:', html.length);
+
+        const toUri = (filePath: string) => {
+            if (!this.panel) {
+                return vscode.Uri.file('');
+            }
+            return this.panel.webview.asWebviewUri(vscode.Uri.file(path.join(webviewPath, filePath)))
+        };
+        
+        const cssUri = toUri('styles.css').toString();
+        const jsUri = toUri('main.js').toString();
+        console.log('DevTreeFlow: CSS URI:', cssUri);
+        console.log('DevTreeFlow: JS URI:', jsUri);
+        
+        html = html.replace('styles.css', cssUri);
+        html = html.replace('main.js', jsUri);
+
+        const logoPath = this.panel.webview.asWebviewUri(vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'Devtreeflow.PNG')));
+        console.log('DevTreeFlow: Logo URI:', logoPath.toString());
+        html = html.replace('src=""', `src="${logoPath}"`);
+
+        console.log('DevTreeFlow: Final HTML length:', html.length);
+        return html;
     }
 
     private async handleSwitchToNode(nodePath: string) {
@@ -206,12 +194,12 @@ export class DevTreeFlowDashboard {
     }
 
     private async handleNewTaskTree() {
-        const taskName = await vscode.window.showInputBox({
-            prompt: 'Enter the name for your new task tree',
-            placeHolder: 'e.g., AddCustomerForm, FixBugInLogin'
+        const mainGoal = await vscode.window.showInputBox({
+            prompt: 'Enter the main goal for your new task tree',
+            placeHolder: 'e.g., Implement a full user authentication system'
         });
 
-        if (!taskName) {
+        if (!mainGoal) {
             return;
         }
 
@@ -222,61 +210,277 @@ export class DevTreeFlowDashboard {
         }
 
         const devTreeFlowPath = path.join(workspaceFolder, 'DevTreeFlow');
-        const taskPath = path.join(devTreeFlowPath, taskName);
 
         try {
             if (!fs.existsSync(devTreeFlowPath)) {
                 await this.handleInitializeDevTreeFlow();
             }
 
-            if (fs.existsSync(taskPath)) {
-                vscode.window.showErrorMessage(`Task tree '${taskName}' already exists`);
-                return;
+            const prompt = EnhancedPromptGenerator.generateGenesisPrompt(mainGoal);
+
+            if (AutoPromptService.isAutoPromptingModeEnabled()) {
+                
+                await AutoPromptService.sendPromptToChatWithAutomation(prompt, 'New Task Tree');
+                vscode.window.showInformationMessage('Waiting for AI to break down the main goal...');
+                
+                // This is a conceptual placeholder. We'll need a robust way to get the response.
+                const aiResponse = await this.getAIResponse();
+
+                if(aiResponse) {
+                    const breakdown = this.parseTaskBreakdown(aiResponse);
+                    if(breakdown) {
+                        await this.createTreeFromBreakdown(breakdown, mainGoal);
+                        vscode.window.showInformationMessage('Task tree created successfully!');
+                    } else {
+                        vscode.window.showErrorMessage('Failed to parse the AI\'s task breakdown.');
+                    }
+                } else {
+                    vscode.window.showErrorMessage('Did not receive a response from the AI.');
+                }
+
+
+            } else {
+                await vscode.env.clipboard.writeText(prompt);
+                vscode.window.showInformationMessage(`Genesis prompt for "${mainGoal}" copied to clipboard. Paste it to have the AI break it down, then use the 'Create Tree from AI Response' button.`);
             }
 
-            fs.mkdirSync(taskPath, { recursive: true });
-            fs.mkdirSync(path.join(taskPath, 'InstructionsFromParent'));
-            fs.mkdirSync(path.join(taskPath, 'MeAndMyChildren'));
-
-            const introContent = `# ${taskName} - Task Introduction
-
-## Created: ${new Date().toISOString().split('T')[0]}
-## Status: Not Started
-
-This is the main task node for: **${taskName}**
-
-### Task Overview
-[Describe what this task should accomplish]
-
-### Subtasks to Create
-[List the child tasks that need to be created]
-
-### Context Files
-- Read parent instructions from: InstructionsFromParent/
-- Document progress in: MeAndMyChildren/
-`;
-
-            fs.writeFileSync(path.join(taskPath, 'MeAndMyChildren', '00_intro.md'), introContent);
-
-            const prompt = `You are the root DevTreeFlow agent for the task: "${taskName}"
-
-Please:
-1. Read the context from /DevTreeFlow/tree-start.md
-2. Read your task intro from /DevTreeFlow/${taskName}/MeAndMyChildren/00_intro.md
-3. Break this task down into reasonable logical subtasks
-4. Create child node folders for each subtask with proper structure
-5. Write clear instructions for each child agent
-
-Begin by analyzing the task "${taskName}" and creating the necessary child nodes.`;
-
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(`Task tree '${taskName}' created! Root prompt copied to clipboard.`);
-
+            // The folder creation will be handled after we get the AI's response.
+            // For now, we just refresh to show any new base folders.
             this.refreshTreeData();
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to create task tree: ${error}`);
         }
+    }
+
+    private async handleCreateTreeFromAIResponse() {
+        const aiResponse = await vscode.window.showInputBox({
+            prompt: "Paste the AI's task breakdown response here",
+            placeHolder: "The full response from the AI, including the <task_breakdown> tags"
+        });
+
+        if (!aiResponse) {
+            return;
+        }
+
+        const mainGoal = await vscode.window.showInputBox({
+            prompt: 'Please re-enter the main goal for context',
+            placeHolder: 'e.g., Implement a full user authentication system'
+        });
+
+        if (!mainGoal) {
+            return;
+        }
+
+        try {
+            const breakdown = this.parseTaskBreakdown(aiResponse);
+            if (breakdown) {
+                await this.createTreeFromBreakdown(breakdown, mainGoal);
+                vscode.window.showInformationMessage('Task tree created successfully from AI response!');
+                this.refreshTreeData();
+            } else {
+                vscode.window.showErrorMessage("Failed to parse the AI's task breakdown. Please make sure you've copied the full response.");
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to create task tree from AI response: ${error}`);
+        }
+    }
+    private async getAIResponse(): Promise<string | undefined> {
+        // This is a placeholder for the logic to get the AI's response.
+        // In a real implementation, this would involve listening to chat events.
+        return await vscode.window.showInputBox({
+            prompt: 'Paste the AI\'s task breakdown response here.',
+            placeHolder: '<task_breakdown>...'
+        });
+    }
+
+    private parseTaskBreakdown(response: string): any[] | null {
+        const breakdownRegex = /<task_breakdown>([\s\S]*?)<\/task_breakdown>/;
+        const match = response.match(breakdownRegex);
+        if (!match) {
+            return null;
+        }
+
+        const lines = match[1].trim().split('\n');
+        const tree: any[] = [];
+        let currentKeyTask: any = null;
+
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('- ')) {
+                const [name, description] = trimmedLine.substring(2).split('|').map(s => s.trim());
+                if (name && description) {
+                    currentKeyTask = {
+                        name,
+                        description,
+                        children: []
+                    };
+                    tree.push(currentKeyTask);
+                }
+            } else if (trimmedLine.startsWith('  - ')) {
+                if (currentKeyTask) {
+                    const [name, description] = trimmedLine.substring(4).split('|').map(s => s.trim());
+                    if (name && description) {
+                        currentKeyTask.children.push({
+                            name,
+                            description
+                        });
+                    }
+                }
+            }
+        }
+        return tree;
+    }
+
+    private async createTreeFromBreakdown(breakdown: any[], mainGoal: string) {
+        const prompt = `# DevTreeFlow AI - Process Breakdown Data
+
+You are the DevTreeFlow AI. Process this breakdown data and create the complete folder structure.
+
+## BREAKDOWN DATA TO PROCESS:
+${JSON.stringify(breakdown, null, 2)}
+
+## MAIN GOAL: ${mainGoal}
+
+## MANDATORY EXECUTION SEQUENCE:
+
+### Step 1: Read System Rules
+<function_calls>
+<invoke name="read_file">
+<parameter name="target_file">DevTreeFlow/tree-start.md</parameter>
+<parameter name="explanation">Reading system rules to understand folder structure requirements</parameter>
+<parameter name="should_read_entire_file">true</parameter>
+</invoke>
+</function_calls>
+
+### Step 2: Check Existing Structure
+<function_calls>
+<invoke name="list_dir">
+<parameter name="relative_workspace_path">DevTreeFlow</parameter>
+<parameter name="explanation">Checking what folders already exist in DevTreeFlow directory</parameter>
+</invoke>
+</function_calls>
+
+### Step 3: Process Breakdown Data
+For EACH task in the breakdown data above:
+
+1. Extract the task name and make it filesystem-safe (replace spaces with hyphens)
+2. Create the main task folder:
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[TASK-NAME]"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating main folder for [TASK-NAME]</parameter>
+</invoke>
+</function_calls>
+
+3. Create required subfolders:
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[TASK-NAME]/InstructionsFromParent"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating InstructionsFromParent folder for [TASK-NAME]</parameter>
+</invoke>
+</function_calls>
+
+<function_calls>
+<invoke name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/[TASK-NAME]/MeAndMyChildren"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating MeAndMyChildren folder for [TASK-NAME]</parameter>
+</invoke>
+</function_calls>
+
+### Step 4: Create Required Files
+For EACH task folder:
+
+1. Create briefing.md:
+<function_calls>
+<invoke name="edit_file">
+<parameter name="target_file">DevTreeFlow/[TASK-NAME]/InstructionsFromParent/briefing.md</parameter>
+<parameter name="instructions">Creating briefing file for [TASK-NAME] with task description and instructions</parameter>
+<parameter name="code_edit"># Task Briefing: [TASK-NAME]
+
+## Parent: [PARENT-NAME]
+## Main Goal: ${mainGoal}
+
+## Task Description
+[Extract description from breakdown data]
+
+## Success Criteria
+- [Specific measurable outcome 1]
+- [Specific measurable outcome 2]
+- [Specific measurable outcome 3]
+
+## Specific Instructions
+1. [Detailed instruction 1]
+2. [Detailed instruction 2]
+3. [Detailed instruction 3]
+
+## Context from Parent
+This task is part of achieving: ${mainGoal}
+[Additional context about how this fits into the larger goal]
+</parameter>
+</function_calls>
+
+2. Create progress file:
+<function_calls>
+<invoke name="edit_file">
+<parameter name="target_file">DevTreeFlow/[TASK-NAME]/MeAndMyChildren/00_intro.md</parameter>
+<parameter name="instructions">Creating progress tracking file for [TASK-NAME]</parameter>
+<parameter name="code_edit"># Task Progress: [TASK-NAME]
+
+## Status: Pending
+## Parent: [PARENT-NAME]
+## Created: [CURRENT-DATE]
+
+## Overview
+[Task overview based on breakdown data]
+
+## My Responsibilities
+1. [Responsibility 1]
+2. [Responsibility 2]
+3. [Responsibility 3]
+
+## Sub-tasks
+[List any sub-tasks from breakdown data]
+
+## Progress Log
+- [CURRENT-DATE]: Task created, awaiting start
+</parameter>
+</function_calls>
+
+### Step 5: Final Summary
+After creating all folders and files, provide a summary:
+
+TASK BREAKDOWN COMPLETE:
+Main Goal: ${mainGoal}
+
+Tasks Created:
+[List all tasks created with their paths]
+
+Total Folders Created: [Number]
+Total Files Created: [Number]
+
+Ready for AI agents to begin work!
+
+## IMPORTANT: Variable Replacement
+When processing the breakdown data:
+1. Replace [TASK-NAME] with actual task names from the breakdown
+2. Replace [PARENT-NAME] with the appropriate parent (Root for top-level tasks)
+3. Replace [CURRENT-DATE] with today's date
+4. Extract descriptions and details from the breakdown JSON data
+
+Start execution now!`;
+        
+        // Send or copy prompt for AI to handle creation
+        if (AutoPromptService.isAutoPromptingModeEnabled()) {
+            await AutoPromptService.sendPromptToChatWithAutomation(prompt, 'Create Tree from Breakdown');
+        } else {
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage('Prompt to create tree copied - paste into AI chat.');
+        }
+        setTimeout(() => this.refreshTreeData(), 3000); // Delay for AI
     }
 
     private async handleInitializeDevTreeFlow() {
@@ -347,872 +551,20 @@ Copy this prompt to your clipboard and begin breaking down your task:
     }
 
     private getWorkspaceFolder(): string | undefined {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        return workspaceFolders && workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : undefined;
+        return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     }
 
-    private refreshTreeData() {
+    public refreshTreeData() {
         if (this.panel) {
+            console.log('DevTreeFlow: Refreshing tree data...');
             const treeData = this.getTreeData();
-            this.panel.webview.postMessage({
-                command: 'updateTree',
-                data: treeData
-            });
+            console.log('DevTreeFlow: Tree data:', treeData);
+            this.panel.webview.postMessage({ command: 'updateTree', data: treeData });
+
             // Also refresh context files
-            this.loadContextFolderStructure();
+            loadContextFolderStructure(this);
             this.updateWebviewState();
         }
-    }
-
-    private getTreeData() {
-        const workspaceFolder = this.getWorkspaceFolder();
-        if (!workspaceFolder) {
-            return { nodes: [], hasDevTreeFlow: false };
-        }
-
-        const devTreeFlowPath = path.join(workspaceFolder, 'DevTreeFlow');
-        
-        if (!fs.existsSync(devTreeFlowPath)) {
-            return { nodes: [], hasDevTreeFlow: false };
-        }
-
-        const nodes = this.buildTreeStructure(devTreeFlowPath, '');
-        return { nodes, hasDevTreeFlow: true };
-    }
-
-    private buildTreeStructure(dirPath: string, relativePath: string): any[] {
-        if (!fs.existsSync(dirPath)) {
-            return [];
-        }
-
-        const items = fs.readdirSync(dirPath, { withFileTypes: true });
-        const nodes: any[] = [];
-
-        for (const item of items) {
-            if (item.isDirectory() && !item.name.startsWith('.')) {
-                const nodeRelativePath = relativePath ? path.join(relativePath, item.name) : item.name;
-                const fullPath = path.join(dirPath, item.name);
-                const children = this.buildTreeStructure(fullPath, nodeRelativePath);
-                
-                const hasInstructions = fs.existsSync(path.join(fullPath, 'InstructionsFromParent'));
-                const hasContext = fs.existsSync(path.join(fullPath, 'MeAndMyChildren'));
-                
-                nodes.push({
-                    name: item.name,
-                    path: nodeRelativePath,
-                    children: children,
-                    hasInstructions,
-                    hasContext,
-                    status: this.getNodeStatus(fullPath)
-                });
-            }
-        }
-
-        return nodes;
-    }
-
-    private getNodeStatus(nodePath: string): string {
-        try {
-            const contextPath = path.join(nodePath, 'MeAndMyChildren');
-            if (!fs.existsSync(contextPath)) {
-                return 'not-started';
-            }
-
-            const files = fs.readdirSync(contextPath);
-            const hasProgress = files.some(file => 
-                file.includes('progress') || 
-                file.includes('status') || 
-                file.includes('complete')
-            );
-
-            return hasProgress ? 'in-progress' : 'not-started';
-        } catch {
-            return 'unknown';
-        }
-    }
-
-    // [6] Update getWebviewContent to add new UI sections and JS wiring
-    private getWebviewContent(logoUri?: vscode.Uri): string {
-        const logoImg = logoUri ? `<img src="${logoUri}" alt="DevTreeFlow Logo" style="height:32px;width:32px;vertical-align:middle;margin-right:10px;" />` : '🌳';
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevTreeFlow Dashboard</title>
-    <style>
-        body {
-            font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size);
-            background-color: var(--vscode-editor-background);
-            color: var(--vscode-editor-foreground);
-            margin: 0;
-            padding: 0;
-        }
-        .dashboard-header {
-            width: 100%;
-            background: var(--vscode-panel-background);
-            border-bottom: 1px solid var(--vscode-panel-border);
-            padding: 18px 24px 12px 24px;
-            box-sizing: border-box;
-            position: relative;
-        }
-        .dashboard-header h1 {
-            margin: 0;
-            color: var(--vscode-titleBar-activeForeground);
-            font-size: 2em;
-        }
-        .refresh-btn-top {
-            position: absolute;
-            top: 18px;
-            right: 24px;
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 4px;
-            padding: 8px 16px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .refresh-btn-top:hover {
-            background: var(--vscode-button-hoverBackground);
-        }
-        .section {
-            margin: 24px 24px 0 24px;
-            padding: 18px;
-            background: var(--vscode-panel-background);
-            border-radius: 8px;
-            border: 1px solid var(--vscode-panel-border);
-        }
-        .section-header {
-            font-size: 1.2em;
-            font-weight: bold;
-            margin-bottom: 12px;
-            color: var(--vscode-titleBar-activeForeground);
-        }
-        .modes-row, .chat-controls-row, .tree-controls-row {
-            display: flex;
-            gap: 16px;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-        .modes-row label, .chat-controls-row button, .tree-controls-row button {
-            margin-right: 8px;
-        }
-        .tree-and-context-row {
-            display: flex;
-            gap: 32px;
-            align-items: flex-start;
-        }
-        #treeContainer {
-            flex: 2;
-            min-width: 350px;
-        }
-        #contextFilesContainer {
-            flex: 1;
-            min-width: 220px;
-            margin-top: 0;
-        }
-        #promptBuilderContainer {
-            flex: 2;
-            min-width: 350px;
-            margin-top: 0;
-        }
-        .context-files-list label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 13px;
-        }
-        .context-file-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-        }
-        .context-file-row label {
-            flex: 1;
-            margin-bottom: 0;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .context-file-open-btn {
-            background-color: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-            border: none;
-            padding: 2px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 11px;
-            white-space: nowrap;
-        }
-        .context-file-open-btn:hover {
-            background-color: var(--vscode-button-secondaryHoverBackground);
-        }
-        .context-folder-tree {
-            font-size: 13px;
-            line-height: 22px;
-        }
-        .context-folder-item {
-            display: flex;
-            align-items: center;
-            padding: 2px 0;
-            cursor: pointer;
-            user-select: none;
-        }
-        .context-folder-item:hover {
-            background-color: var(--vscode-list-hoverBackground);
-        }
-        .context-folder-icon {
-            margin-right: 4px;
-            flex-shrink: 0;
-        }
-        .context-folder-name {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .context-folder-actions {
-            display: none;
-            gap: 4px;
-            margin-left: 8px;
-        }
-        .context-folder-item:hover .context-folder-actions {
-            display: flex;
-        }
-        .context-folder-children {
-            margin-left: 20px;
-        }
-        .context-folder-children.collapsed {
-            display: none;
-        }
-        .context-folder-toggle {
-            background: none;
-            border: none;
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            padding: 2px 4px;
-            font-size: 12px;
-            opacity: 0.7;
-            margin-right: 4px;
-            transition: transform 0.2s ease;
-        }
-        .context-folder-toggle:hover {
-            opacity: 1;
-        }
-        .context-folder-toggle.expanded {
-            transform: rotate(90deg);
-        }
-        .context-folder-header {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-        }
-        .context-folder-header:hover {
-            background-color: var(--vscode-list-hoverBackground);
-        }
-        .context-add-btn {
-            background: none;
-            border: none;
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            padding: 2px 4px;
-            font-size: 16px;
-            opacity: 0.7;
-        }
-        .context-add-btn:hover {
-            opacity: 1;
-            background-color: var(--vscode-toolbar-hoverBackground);
-        }
-        .context-file-checkbox {
-            margin-right: 6px;
-        }
-        .context-header-actions {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        textarea {
-            width: 100%;
-            min-height: 120px;
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 13px;
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 4px;
-            margin-bottom: 8px;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-        .btn {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .btn:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-        .btn.secondary {
-            background-color: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-        }
-        .btn.secondary:hover {
-            background-color: var(--vscode-button-secondaryHoverBackground);
-        }
-        .btn.enabled {
-            background-color: var(--vscode-terminal-ansiGreen);
-            color: var(--vscode-button-foreground);
-        }
-        .btn.enabled:hover {
-            background-color: var(--vscode-terminal-ansiBrightGreen);
-        }
-        
-        /* Tree node styles */
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: var(--vscode-descriptionForeground);
-        }
-        .empty-state h2 {
-            margin-bottom: 10px;
-            color: var(--vscode-titleBar-activeForeground);
-        }
-        .tree-node {
-            margin: 10px 0;
-            padding: 12px;
-            background-color: var(--vscode-list-inactiveSelectionBackground);
-            border-radius: 6px;
-            border-left: 4px solid var(--vscode-textLink-foreground);
-        }
-        .tree-node.not-started {
-            border-left-color: var(--vscode-editorWarning-foreground);
-        }
-        .tree-node.in-progress {
-            border-left-color: var(--vscode-editorInfo-foreground);
-        }
-        .tree-node.completed {
-            border-left-color: var(--vscode-terminal-ansiGreen);
-        }
-        .node-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        .node-name {
-            font-weight: bold;
-            font-size: 14px;
-            color: var(--vscode-editor-foreground);
-        }
-        .node-status {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            background-color: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
-        }
-        .node-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .node-actions .btn {
-            padding: 4px 12px;
-            font-size: 11px;
-        }
-        .node-children {
-            margin-left: 20px;
-            margin-top: 10px;
-            border-left: 2px solid var(--vscode-panel-border);
-            padding-left: 15px;
-        }
-        .node-path {
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            margin-bottom: 8px;
-        }
-        .icon {
-            margin-right: 5px;
-        }
-        
-        @media (max-width: 1100px) {
-            .tree-and-context-row {
-                flex-direction: column;
-            }
-            #promptBuilderContainer, #contextFilesContainer, #treeContainer {
-                min-width: 0;
-                width: 100%;
-            }
-        }
-        .devtreeflow-logo {
-            height: 18px;
-            width: 18px;
-            vertical-align: middle;
-            margin-right: 4px;
-        }
-    </style>
-</head>
-<body>
-    <div class="dashboard-header">
-        <h1>${logoImg} DevTreeFlow Dashboard</h1>
-        <button class="refresh-btn-top" onclick="refreshTree()">
-            <img src="${logoUri}" class="devtreeflow-logo" alt="logo" />Refresh
-        </button>
-    </div>
-    <div class="section">
-        <div class="section-header">Modes</div>
-        <div class="modes-row">
-            <button class="btn" id="autoPromptToggle" onclick="toggleAutoPromptingMode()">
-                <span class="icon">🤖</span><span id="autoPromptText">Enable Auto-Prompting</span>
-            </button>
-            <label><input type="checkbox" id="copyToPromptBuilderToggle" onchange="toggleCopyToPromptBuilderMode()"> Copy to Prompt Builder before prompting</label>
-        </div>
-    </div>
-    <div class="section">
-        <div class="section-header">Chat Controls</div>
-        <div class="chat-controls-row">
-            <button class="btn secondary" onclick="openNewCursorChat()">
-                <span class="icon">💬</span>New Chat
-            </button>
-            <button class="btn secondary" onclick="openNewCursorChatTab()">
-                <span class="icon">💡</span>Open New Chat Tab
-            </button>
-            <button class="btn secondary" onclick="clearCurrentChat()">
-                <span class="icon">🧹</span>Clear Chat
-            </button>
-        </div>
-    </div>
-    <div class="section">
-        <div class="section-header">Tree Controls</div>
-        <div class="tree-controls-row">
-            <button class="btn" onclick="newTaskTree()">
-                <span class="icon">➕</span>New Task Tree
-            </button>
-        </div>
-    </div>
-    <div class="section">
-        <div class="tree-and-context-row">
-            <div id="treeContainer">
-                <div class="empty-state">
-                    <h2>No DevTreeFlow Structure Found</h2>
-                    <p>Initialize DevTreeFlow to start managing your AI development workflows.</p>
-                    <button class="btn" onclick="initializeDevTreeFlow()">
-                        <span class="icon">🚀</span>Initialize DevTreeFlow
-                    </button>
-                </div>
-            </div>
-            <div id="contextFilesContainer">
-                <h3><img src="${logoUri}" class="devtreeflow-logo" alt="logo" /> Project Specific Context Files</h3>
-                <div class="context-files-list">
-                    <p style="color: var(--vscode-descriptionForeground);">Loading context files...</p>
-                </div>
-            </div>
-            <div id="promptBuilderContainer">
-                <h3>🛠️ Prompt Builder</h3>
-                <textarea id="promptBuilderTextarea" rows="10" placeholder="Tree/leaf prompts will appear here when you use tree actions with 'Copy to Prompt Builder' mode enabled..."></textarea>
-                <div>
-                    <button class="btn" onclick="autoPromptFromBuilder()">
-                        <span class="icon">🚀</span>Auto-Prompt from Builder
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script>
-        const vscode = acquireVsCodeApi();
-        let copyToPromptBuilderMode = false;
-        let collapsedFolders = new Set();
-
-        window.addEventListener('message', event => {
-            const message = event.data;
-            switch (message.command) {
-                case 'updateTree':
-                    updateTreeDisplay(message.data);
-                    break;
-                case 'updateAutoPromptingState':
-                    updateAutoPromptingState(message.isEnabled);
-                    break;
-                case 'updateDashboardState':
-                    updateDashboardState(message);
-                    break;
-            }
-        });
-
-        function updateTreeDisplay(data) {
-            const container = document.getElementById('treeContainer');
-            
-            if (!data.hasDevTreeFlow || data.nodes.length === 0) {
-                container.innerHTML = \`
-                    <div class="empty-state">
-                        <h2>No DevTreeFlow Structure Found</h2>
-                        <p>Initialize DevTreeFlow to start managing your AI development workflows.</p>
-                        <button class="btn" onclick="initializeDevTreeFlow()">
-                            <span class="icon">🚀</span>Initialize DevTreeFlow
-                        </button>
-                    </div>
-                \`;
-                return;
-            }
-
-            container.innerHTML = \`
-                <h3>📂 Task Trees</h3>
-                \${data.nodes.map(node => renderNode(node)).join('')}
-            \`;
-        }
-
-        function renderNode(node) {
-            const statusIcon = {
-                'not-started': '⭕',
-                'in-progress': '🔄',
-                'completed': '✅',
-                'unknown': '❓'
-            }[node.status] || '❓';
-
-            return \`
-                <div class="tree-node \${node.status}">
-                    <div class="node-header">
-                        <div class="node-name">\${statusIcon} \${node.name}</div>
-                        <div class="node-status">\${node.status.replace('-', ' ')}</div>
-                    </div>
-                    <div class="node-path">📁 /DevTreeFlow/\${node.path}</div>
-                    <div class="node-actions">
-                        <button class="btn" onclick="switchToNode('\${node.path}')">
-                            🎯 Switch to Me
-                        </button>
-                        <button class="btn secondary" onclick="switchAndFollowParent('\${node.path}')">
-                            👨‍👩‍👧‍👦 Follow Parent
-                        </button>
-                        <button class="btn secondary" onclick="assessChildren('\${node.path}')">
-                            👀 Assess Children
-                        </button>
-                        <button class="btn secondary" onclick="summarizeStatus('\${node.path}')">
-                            📊 Status Summary
-                        </button>
-                    </div>
-                    \${node.children.length > 0 ? \`
-                        <div class="node-children">
-                            \${node.children.map(child => renderNode(child)).join('')}
-                        </div>
-                    \` : ''}
-                </div>
-            \`;
-        }
-
-        function switchToNode(nodePath) {
-            if (copyToPromptBuilderMode) {
-                vscode.postMessage({
-                    command: 'treeActionPrompt',
-                    prompt: \`nodePath:\${nodePath}\\naction:switchToNode\`
-                });
-            } else {
-                vscode.postMessage({
-                    command: 'switchToNode',
-                    nodePath: nodePath
-                });
-            }
-        }
-
-        function switchAndFollowParent(nodePath) {
-            if (copyToPromptBuilderMode) {
-                vscode.postMessage({
-                    command: 'treeActionPrompt',
-                    prompt: \`nodePath:\${nodePath}\\naction:switchAndFollowParent\`
-                });
-            } else {
-                vscode.postMessage({
-                    command: 'switchAndFollowParent',
-                    nodePath: nodePath
-                });
-            }
-        }
-
-        function assessChildren(nodePath) {
-            if (copyToPromptBuilderMode) {
-                vscode.postMessage({
-                    command: 'treeActionPrompt',
-                    prompt: \`nodePath:\${nodePath}\\naction:assessChildren\`
-                });
-            } else {
-                vscode.postMessage({
-                    command: 'assessChildren',
-                    nodePath: nodePath
-                });
-            }
-        }
-
-        function summarizeStatus(nodePath) {
-            if (copyToPromptBuilderMode) {
-                vscode.postMessage({
-                    command: 'treeActionPrompt',
-                    prompt: \`nodePath:\${nodePath}\\naction:summarizeStatus\`
-                });
-            } else {
-                vscode.postMessage({
-                    command: 'summarizeStatus',
-                    nodePath: nodePath
-                });
-            }
-        }
-
-        function newTaskTree() {
-            vscode.postMessage({
-                command: 'newTaskTree'
-            });
-        }
-
-        function refreshTree() {
-            vscode.postMessage({
-                command: 'refreshTree'
-            });
-        }
-
-        function initializeDevTreeFlow() {
-            vscode.postMessage({
-                command: 'initializeDevTreeFlow'
-            });
-        }
-
-        function toggleAutoPromptingMode() {
-            vscode.postMessage({
-                command: 'toggleAutoPromptingMode'
-            });
-        }
-
-        function openNewCursorChat() {
-            vscode.postMessage({
-                command: 'openNewCursorChat'
-            });
-        }
-        
-        function openNewCursorChatTab() {
-            vscode.postMessage({
-                command: 'openNewCursorChatTab'
-            });
-        }
-
-        function clearCurrentChat() {
-            vscode.postMessage({ command: 'clearCurrentChat' });
-        }
-
-        function toggleCopyToPromptBuilderMode() {
-            copyToPromptBuilderMode = !copyToPromptBuilderMode;
-            vscode.postMessage({ command: 'toggleCopyToPromptBuilderMode' });
-        }
-
-        function toggleContextFileTick(filename) {
-            vscode.postMessage({ command: 'toggleContextFileTick', filename: filename });
-        }
-
-        function openContextFile(filename) {
-            vscode.postMessage({ command: 'openContextFile', filename: filename });
-        }
-
-        function createContextFolder(folderPath) {
-            vscode.postMessage({ command: 'createContextFolder', folderPath: folderPath || '' });
-        }
-
-        function createContextDocument(folderPath) {
-            vscode.postMessage({ command: 'createContextDocument', folderPath: folderPath || '' });
-        }
-
-        function refreshContextFiles() {
-            vscode.postMessage({ command: 'refreshContextFiles' });
-        }
-
-        function toggleFolder(folderPath) {
-            if (collapsedFolders.has(folderPath)) {
-                collapsedFolders.delete(folderPath);
-            } else {
-                collapsedFolders.add(folderPath);
-            }
-            
-            // Re-render the folder structure to update the UI
-            reRenderFolderStructure();
-        }
-
-        function expandAllFolders() {
-            collapsedFolders.clear();
-            reRenderFolderStructure();
-        }
-
-        function collapseAllFolders() {
-            // Collect all folder paths from the structure
-            function collectFolderPaths(structure) {
-                const paths = [];
-                if (structure.type === 'folder' && structure.children && structure.children.length > 0) {
-                    paths.push(structure.path);
-                    structure.children.forEach(child => {
-                        paths.push(...collectFolderPaths(child));
-                    });
-                }
-                return paths;
-            }
-            
-            if (window.currentFolderStructure) {
-                const allFolderPaths = collectFolderPaths(window.currentFolderStructure);
-                collapsedFolders.clear();
-                allFolderPaths.forEach(path => collapsedFolders.add(path));
-                reRenderFolderStructure();
-            }
-        }
-
-        function reRenderFolderStructure() {
-            const contextFilesContainer = document.getElementById('contextFilesContainer');
-            if (window.currentFolderStructure && window.currentContextFileTicks) {
-                const contextFilesHTML = \`
-                    <h3>📄 Project Specific Context Files</h3>
-                    <div class="context-header-actions">
-                        <button class="btn secondary" onclick="createContextFolder('')" title="Create new folder">
-                            <span class="icon">📁</span>New Folder
-                        </button>
-                        <button class="btn secondary" onclick="createContextDocument('')" title="Create new document">
-                            <span class="icon">📄</span>New Document
-                        </button>
-                        <button class="btn secondary" onclick="expandAllFolders()" title="Expand all folders">
-                            <span class="icon">📂</span>Expand All
-                        </button>
-                        <button class="btn secondary" onclick="collapseAllFolders()" title="Collapse all folders">
-                            <span class="icon">📁</span>Collapse All
-                        </button>
-                        <button class="btn secondary" onclick="refreshContextFiles()" title="Refresh">
-                            <span class="icon">🔄</span>Refresh
-                        </button>
-                    </div>
-                    <div class="context-folder-tree">
-                        \${renderFolderStructure(window.currentFolderStructure, window.currentContextFileTicks)}
-                    </div>
-                \`;
-                contextFilesContainer.innerHTML = contextFilesHTML;
-            }
-        }
-
-        function renderFolderStructure(structure, ticks) {
-            if (!structure) return '';
-            
-            var html = '';
-            
-            if (structure.type === 'folder') {
-                const isCollapsed = collapsedFolders.has(structure.path);
-                const hasChildren = structure.children && structure.children.length > 0;
-                const toggleIcon = hasChildren ? (isCollapsed ? '▶' : '▼') : '';
-                
-                html += \`<div class="context-folder-item">
-                    <div class="context-folder-header" onclick="toggleFolder('\${structure.path.replace(/'/g, "\\\\'")}')">
-                        \${hasChildren ? \`<button class="context-folder-toggle \${isCollapsed ? '' : 'expanded'}" onclick="event.stopPropagation(); toggleFolder('\${structure.path.replace(/'/g, "\\\\'")}')">\${toggleIcon}</button>\` : '<span style="width: 16px; display: inline-block;"></span>'}
-                        <span class="context-folder-icon">📁</span>
-                        <span class="context-folder-name">\${structure.name}</span>
-                    </div>
-                    <div class="context-folder-actions">
-                        <button class="context-add-btn" onclick="createContextFolder('\${structure.path.replace(/'/g, "\\\\'")}')" title="Add subfolder">📁+</button>
-                        <button class="context-add-btn" onclick="createContextDocument('\${structure.path.replace(/'/g, "\\\\'")}')" title="Add document">📄+</button>
-                    </div>
-                </div>\`;
-                
-                if (hasChildren) {
-                    html += \`<div class="context-folder-children \${isCollapsed ? 'collapsed' : ''}">\`;
-                    structure.children.forEach(function(child) {
-                        html += renderFolderStructure(child, ticks);
-                    });
-                    html += '</div>';
-                }
-            } else if (structure.type === 'file') {
-                html += \`<div class="context-folder-item">
-                    <input type="checkbox" class="context-file-checkbox" onchange="toggleContextFileTick('\${structure.path.replace(/'/g, "\\\\'")}')" \${ticks[structure.path] ? 'checked' : ''}>
-                    <span class="context-folder-icon">📄</span>
-                    <span class="context-folder-name">\${structure.name}</span>
-                    <div class="context-folder-actions">
-                        <button class="context-add-btn" onclick="openContextFile('\${structure.path.replace(/'/g, "\\\\'")}')" title="Open">👁️</button>
-                    </div>
-                </div>\`;
-            }
-            
-            return html;
-        }
-
-        function updatePromptBuilder() {
-            const textarea = document.getElementById('promptBuilderTextarea');
-            vscode.postMessage({ command: 'updatePromptBuilder', content: textarea.value });
-        }
-
-        function autoPromptFromBuilder() {
-            updatePromptBuilder(); // Save current content first
-            vscode.postMessage({ command: 'autoPromptFromBuilder' });
-        }
-
-        // Update auto-prompting button state
-        function updateAutoPromptingState(isEnabled) {
-            const button = document.getElementById('autoPromptToggle');
-            const text = document.getElementById('autoPromptText');
-            
-            if (isEnabled) {
-                button.classList.add('enabled');
-                text.textContent = 'Auto-Prompting ON';
-            } else {
-                button.classList.remove('enabled');
-                text.textContent = 'Enable Auto-Prompting';
-            }
-        }
-
-        function updateDashboardState(message) {
-            const contextFilesContainer = document.getElementById('contextFilesContainer');
-            const promptBuilderTextarea = document.getElementById('promptBuilderTextarea');
-            const copyToPromptBuilderToggle = document.getElementById('copyToPromptBuilderToggle');
-
-            if (message.contextFolderStructure) {
-                // Store current state for toggle function
-                window.currentFolderStructure = message.contextFolderStructure;
-                window.currentContextFileTicks = message.contextFileTicks || {};
-                
-                const contextFilesHTML = \`
-                    <h3>📄 Project Specific Context Files</h3>
-                    <div class="context-header-actions">
-                        <button class="btn secondary" onclick="createContextFolder('')" title="Create new folder">
-                            <span class="icon">📁</span>New Folder
-                        </button>
-                        <button class="btn secondary" onclick="createContextDocument('')" title="Create new document">
-                            <span class="icon">📄</span>New Document
-                        </button>
-                        <button class="btn secondary" onclick="expandAllFolders()" title="Expand all folders">
-                            <span class="icon">📂</span>Expand All
-                        </button>
-                        <button class="btn secondary" onclick="collapseAllFolders()" title="Collapse all folders">
-                            <span class="icon">📁</span>Collapse All
-                        </button>
-                        <button class="btn secondary" onclick="refreshContextFiles()" title="Refresh">
-                            <span class="icon">🔄</span>Refresh
-                        </button>
-                    </div>
-                    <div class="context-folder-tree">
-                        \${renderFolderStructure(message.contextFolderStructure, message.contextFileTicks || {})}
-                    </div>
-                \`;
-                contextFilesContainer.innerHTML = contextFilesHTML;
-            }
-
-            if (message.promptBuilderContent !== undefined) {
-                promptBuilderTextarea.value = message.promptBuilderContent;
-            }
-
-            if (message.copyToPromptBuilderMode !== undefined) {
-                copyToPromptBuilderMode = message.copyToPromptBuilderMode;
-                copyToPromptBuilderToggle.checked = message.copyToPromptBuilderMode;
-            }
-        }
-        
-        // Add event listener for prompt builder textarea changes
-        document.getElementById('promptBuilderTextarea').addEventListener('input', function() {
-            updatePromptBuilder();
-        });
-    </script>
-</body>
-</html>`;
     }
 
     private async handleInitializeLeaf(leafPath: string) {
@@ -1281,31 +633,12 @@ Copy this prompt to your clipboard and begin breaking down your task:
 
     // [5] Add helpers for prompt builder and context file ticks
     private updatePromptBuilderWithContextFiles() {
-        const contextDir = path.join(this.getWorkspaceFolder() || '', 'ProjectSpecificContextFiles');
-        let contextReferences = '';
-        
-        // Collect all ticked context files
-        const tickedFiles = this.contextFilesList.filter(file => this.contextFileTicks[file]);
-        
-        if (tickedFiles.length > 0) {
-            contextReferences = 'Please read the context files for context for this request:\n';
-            tickedFiles.forEach(file => {
-                contextReferences += `- ${path.join(contextDir, file)}\n`;
-            });
-            contextReferences += '\n';
-        }
-        
-        // Always keep tree/leaf prompt at the top (if present)
-        const treePromptMatch = this.promptBuilderContent.match(/<!--TREE_PROMPT-->.*?<!--END_TREE_PROMPT-->/s);
-        const treePrompt = treePromptMatch ? treePromptMatch[0] + '\n\n' : '';
-        const contentWithoutTreePrompt = this.promptBuilderContent.replace(/<!--TREE_PROMPT-->.*?<!--END_TREE_PROMPT-->\n\n/s, '');
-        const contentWithoutContextRefs = contentWithoutTreePrompt.replace(/Please read the context files for context for this request:[\s\S]*?\n\n/, '');
-        
-        this.promptBuilderContent = `${treePrompt}${contextReferences}${contentWithoutContextRefs}`;
+        updatePromptBuilderWithContextFiles(this);
     }
 
-    private updateWebviewState() {
+    public updateWebviewState() {
         if (this.panel) {
+            console.log('DevTreeFlow: Updating webview state with context structure:', JSON.stringify(this.contextFolderStructure, null, 2));
             this.panel.webview.postMessage({
                 command: 'updateDashboardState',
                 contextFilesList: this.contextFilesList,
@@ -1461,53 +794,170 @@ When this document is selected:
     }
 
     private loadContextFolderStructure() {
-        const contextDir = path.join(this.getWorkspaceFolder() || '', 'ProjectSpecificContextFiles');
-        if (!fs.existsSync(contextDir)) {
-            fs.mkdirSync(contextDir, { recursive: true });
-        }
-        this.contextFolderStructure = this.buildContextFolderStructure(contextDir, '');
-        this.contextFilesList = this.flattenContextFiles(this.contextFolderStructure);
+        loadContextFolderStructure(this);
     }
 
-    private buildContextFolderStructure(dirPath: string, relativePath: string): any {
-        const items = fs.readdirSync(dirPath, { withFileTypes: true });
-        const structure: any = {
-            name: relativePath || 'ProjectSpecificContextFiles',
-            path: relativePath,
-            type: 'folder',
-            children: []
-        };
-
-        for (const item of items) {
-            // Skip 'Older Versions' folder
-            if (item.name === 'Older Versions') continue;
-
-            const itemPath = path.join(dirPath, item.name);
-            // Build POSIX-style relative path to ensure stable separators in the Webview
-            const itemRelativePath = relativePath ? `${relativePath}/${item.name}` : item.name;
-
-            if (item.isDirectory()) {
-                structure.children.push(this.buildContextFolderStructure(itemPath, itemRelativePath));
-            } else if (item.isFile() && item.name.endsWith('.md')) {
-                structure.children.push({
-                    name: item.name,
-                    path: itemRelativePath,
-                    type: 'file'
-                });
-            }
+    private async handleNodeAction(nodePath: string) {
+        const workspaceFolder = this.getWorkspaceFolder();
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found. Please open a project or workspace.');
+            return;
         }
 
-        return structure;
+        const actions = [
+            { label: 'Switch to this Node', action: 'switchToNode' },
+            { label: 'Assess Children', action: 'assessChildren' },
+            { label: 'Summarize Status', action: 'summarizeStatus' },
+            { label: 'View Briefing', action: 'viewBriefing' },
+            { label: 'Break Down into Sub-Tasks', action: 'breakDownSubTasks' },
+            { label: 'Setup Sub-Task', action: 'setupSubTask' },
+            { label: 'Review Children Details', action: 'reviewChildren' }
+        ];
+
+        const selected = await vscode.window.showQuickPick(actions, { title: `Actions for ${path.basename(nodePath)}` });
+
+        if (selected) {
+            const chosenAction = selected.action;
+            switch (chosenAction) {
+                case 'switchToNode':
+                    await this.handleSwitchToNode(nodePath);
+                    break;
+                case 'assessChildren':
+                    await this.handleAssessChildren(nodePath);
+                    break;
+                case 'summarizeStatus':
+                    await this.handleSummarizeStatus(nodePath);
+                    break;
+                case 'viewBriefing':
+                    const briefingPath = path.join(workspaceFolder, 'DevTreeFlow', nodePath, 'InstructionsFromParent', 'briefing.md');
+                    try {
+                        const document = await vscode.workspace.openTextDocument(briefingPath);
+                        await vscode.window.showTextDocument(document);
+                    } catch (error) {
+                        vscode.window.showErrorMessage(`Could not open briefing file: ${briefingPath}`);
+                    }
+                    break;
+                case 'breakDownSubTasks':
+                    await this.handleBreakDownSubTasks(nodePath);
+                    break;
+                case 'setupSubTask':
+                    await this.handleSetupSubTask(nodePath);
+                    break;
+                case 'reviewChildren':
+                    const children = getNodeChildren(this, nodePath);
+                    const child = await vscode.window.showQuickPick(children.map(c => c.name));
+                    if(child) {
+                        await this.handleNodeAction(path.join(nodePath, child));
+                    }
+                    break;
+            }
+        }
     }
 
-    private flattenContextFiles(structure: any, files: string[] = []): string[] {
-        if (structure.type === 'file') {
-            files.push(structure.path);
-        } else if (structure.children) {
-            for (const child of structure.children) {
-                this.flattenContextFiles(child, files);
+    private async handleBreakDownSubTasks(nodePath: string) {
+        const subTaskGoal = await vscode.window.showInputBox({
+            prompt: 'Enter the goal for breaking down this node into sub-tasks',
+            placeHolder: 'e.g., Break down user authentication implementation'
+        });
+        if (subTaskGoal) {
+            const prompt = EnhancedPromptGenerator.generateGenesisPrompt(subTaskGoal);
+            if (AutoPromptService.isAutoPromptingModeEnabled()) {
+                await AutoPromptService.sendPromptToChatWithAutomation(prompt, `Break Down Sub-Tasks for ${path.basename(nodePath)}`);
+            } else {
+                await vscode.env.clipboard.writeText(prompt);
+                vscode.window.showInformationMessage(`Sub-task breakdown prompt for "${subTaskGoal}" copied to clipboard.`);
             }
         }
-        return files;
+    }
+
+    private async handleSetupSubTask(nodePath: string) {
+        const subTaskName = await vscode.window.showInputBox({
+            prompt: 'Enter name for new sub-task',
+            placeHolder: 'e.g., Implement Login Endpoint'
+        });
+        if (subTaskName) {
+            const prompt = `You are DevTreeFlow AI. Create sub-task /DevTreeFlow/${nodePath}/${subTaskName}:
+
+1. <function_call name="list_dir">
+<parameter name="relative_workspace_path">DevTreeFlow/${nodePath}</parameter>
+</function_call>
+
+2. <function_call name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/${nodePath}/${subTaskName}"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating sub-task folder structure</parameter>
+</function_call>
+
+3. <function_call name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/${nodePath}/${subTaskName}/InstructionsFromParent"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating InstructionsFromParent folder</parameter>
+</function_call>
+
+4. <function_call name="run_terminal_cmd">
+<parameter name="command">mkdir -p "DevTreeFlow/${nodePath}/${subTaskName}/MeAndMyChildren"</parameter>
+<parameter name="is_background">false</parameter>
+<parameter name="explanation">Creating MeAndMyChildren folder</parameter>
+</function_call>
+
+5. <function_call name="edit_file">
+<parameter name="target_file">DevTreeFlow/${nodePath}/${subTaskName}/MeAndMyChildren/00_intro.md</parameter>
+<parameter name="instructions">Creating initial progress file for ${subTaskName}</parameter>
+<parameter name="code_edit"># ${subTaskName} - Sub-Task Introduction
+
+## Created: ${new Date().toISOString().split('T')[0]}
+## Status: Not Started
+
+This is a sub-task of: **${path.basename(nodePath)}**
+
+### Task Overview
+[Describe what this sub-task should accomplish]
+
+### Progress Log
+- [${new Date().toISOString().split('T')[0]}] Task created and initialized
+
+### Notes
+- Waiting for instructions to begin
+- Parent task: ${path.basename(nodePath)}
+</parameter>
+</function_call>
+
+6. <function_call name="read_file">
+<parameter name="target_file">DevTreeFlow/tree-start.md</parameter>
+<parameter name="explanation">Reading system rules for context</parameter>
+</function_call>
+
+Follow the system rules from tree-start.md. Create briefing.md with parent context linking to "${path.basename(nodePath)}".`;
+            if (AutoPromptService.isAutoPromptingModeEnabled()) {
+                await AutoPromptService.sendPromptToChatWithAutomation(prompt, `Setup Sub-Task '${subTaskName}'`);
+            } else {
+                await vscode.env.clipboard.writeText(prompt);
+                vscode.window.showInformationMessage(`Prompt to create sub-task '${subTaskName}' copied to clipboard. Paste into AI chat to execute.`);
+            }
+            // Refresh after AI would have created it
+            setTimeout(() => this.refreshTreeData(), 2000); // Delay to allow AI to act
+        }
+    }
+
+    private async handleReviewChildren(nodePath: string) {
+        const workspaceFolder = this.getWorkspaceFolder();
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found.');
+            return;
+        }
+        const children = getNodeChildren(nodePath, workspaceFolder);
+        if (children.length === 0) {
+            vscode.window.showInformationMessage('No children found for this node.');
+            return;
+        }
+        const childDetails = children.map(child => ({
+            label: child.name,
+            description: `Status: ${child.status}`,
+            detail: `Path: /DevTreeFlow/${child.path}`
+        }));
+        const selected = await vscode.window.showQuickPick(childDetails, { placeHolder: 'Select a child to review' });
+        if (selected) {
+            await this.handleNodeAction(path.join(nodePath, selected.label)); // Recursive call for child actions
+        }
     }
 }
